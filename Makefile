@@ -2,7 +2,7 @@ SV_FILES = ${wildcard ./src/pkg/*.sv} ${wildcard ./src/*.sv}
 TB_FILES = ${wildcard ./tb/*.sv}
 ALL_FILES = ${SV_FILES} ${TB_FILES}
 
-all: assembler run
+all: lint run
 
 assembler:
 	python3 ./test/assembler.py

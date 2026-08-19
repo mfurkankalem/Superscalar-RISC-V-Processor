@@ -19,16 +19,56 @@ module top import riscv_pkg::*;
         output logic [XLEN-1:0] mem_data_o // retired memory data //imem için kullanılacak
     );
 
+logic en_f = 1;
 
-    // === Instruction Fetch ===================================================
-logic [XLEN-1:0] pc, im_rd;
-logic [XLEN-1:0] instruction_cache [0:31]; // 31 instruction cache
-assign pc = INST_START;
-
-instruction_memory instruction_memory_0(.im_a(pc), .im_rd(im_rd));
+// ====== Fetch Stage ==========================================================
+logic startvalue;
+logic [XLEN-1:0] pc_f, im_rd, pc_f_in;
+logic [XLEN-1:0] instruction_cache [0:31]; // 32 instruction cache
 
 
-    // === Others ==============================================================
+instruction_memory instruction_memory_0(.im_a(pc_f), .im_rd(im_rd)); // read memory
+
+always_ff @(negedge clk) begin
+    if (im_rd != instruction_cache[pc_f[6:2]]) begin
+        instruction_cache[pc_f[6:2]] <= im_rd;
+    end
+end
+
+always_ff @(posedge clk) begin
+    if (rstn_i) begin
+    if(startvalue) begin
+        if (en_f) begin
+        pc_f <= pc_f_in;
+        pc_d <= pc_f;
+        instr_d <= instruction_cache[pc_f[6:2]];
+        end
+    end else begin
+      pc_f <= INST_START;
+      startvalue <= 1;
+      end
+    end else
+      pc_f <= 0;
+end
+
+// ====== Decode Stage =========================================================
+logic [XLEN-1:0] pc_d, instr_d;
+
+
+
+// ====== Fake Stage ==========================================================
+
+always_comb begin
+    pc_f_in = prog_cnt(pc_f);
+end
+
+// ====== Functions ==========================================================
+
+function automatic logic [XLEN-1:0] prog_cnt(input logic [XLEN-1:0] pc_value);
+    prog_cnt = pc_value + 4;
+endfunction
+
+// ====== Others ==========================================================
 
 
 assign update_o = 0;
