@@ -1,0 +1,4 @@
+obj_dir
+dump.vcd
+*.gtkw
+dump.sv
