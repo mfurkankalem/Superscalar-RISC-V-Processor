@@ -10,6 +10,7 @@ module tb ();
   logic                       update;
   logic                       clk;
   logic                       rstn;
+  logic                       test_i;
 
   top i_top (
       .clk(clk),
@@ -22,7 +23,8 @@ module tb ();
       .reg_addr_o(reg_addr),
       .reg_data_o(reg_data),
       .mem_addr_o(mem_addr),  
-      .mem_data_o(mem_data)
+      .mem_data_o(mem_data),
+      .test_i(test_i)
 
   );
   integer file_pointer;
@@ -50,8 +52,11 @@ module tb ();
 
   initial begin
     rstn = 0;
+    test_i = 0;
     #2;
     rstn = 1;
+    #2
+    test_i = 1;
     #20000;
     for (int i = 0; i < riscv_pkg::XLEN/4; i++) begin
       addr = i*4;

@@ -19,13 +19,90 @@ package riscv_pkg;
 
   localparam INST_START    = 32'h80000000;
 
-  localparam CTRLB_LEN     = 3'd5;
-  localparam CTRLB_R       = 3'd4;
-  localparam CTRLB_M1      = 3'd3;
-  localparam CTRLB_M2_MSB  = 3'd2;
-  localparam CTRLB_M2_LSB  = 3'd1;
-  localparam CTRLB_M3      = 3'd0;
+  typedef struct packed {
+    logic [6:0] op;
+    logic [4:0]  rd;
+    logic [2:0]  funct3;
+    logic [4:0]  rs1;
+    logic [4:0]  rs2;
+    logic [6:0]  funct7;
+    logic [24:0] imm;
+  } instruct_t;
   
+  typedef enum logic [6:0] {
+    OP_RTYPE = 7'b1010011,
+    OP_ITYPE = 7'b0010011,
+    OP_BTYPE = 7'b1100011,
+    OP_UTYPE = 7'b0110111,
+    OP_JTYPE = 7'b1101111,
+    OP_STYPE = 7'b0100011,
+    OP_LTYPE = 7'b0000011
+  } opcode_e;
+
+  typedef enum logic [2:0] {
+    F3_ADD     = 3'b000,
+    F3_SLL     = 3'b001,
+    F3_SLT     = 3'b010,
+    F3_SLTU    = 3'b011,
+    F3_XOR     = 3'b100,
+    F3_SRL_SRA = 3'b101,
+    F3_OR      = 3'b110,
+    F3_AND     = 3'b111
+  } r_funct3;
+
+  localparam F7_ADD  = 7'b0000000;
+  localparam F7_SUB  = 7'b0100000;
+  localparam F7_SLL  = 7'b0000000;
+  localparam F7_SLT  = 7'b0000000;
+  localparam F7_SLTU = 7'b0000000;
+  localparam F7_XOR  = 7'b0000000;
+  localparam F7_SRL  = 7'b0000000;
+  localparam F7_SRA  = 7'b0100000;
+  localparam F7_OR   = 7'b0000000;
+  localparam F7_AND  = 7'b0000000;
+  localparam F7_SLLI = 7'b0000000;
+  localparam F7_SRLI = 7'b0000000;
+  localparam F7_SRAI = 7'b0100000;
+
+  typedef enum logic [2:0] {
+    F3_ADDI  = 3'b000,
+    F3_SLTI  = 3'b010,
+    F3_SLTIU = 3'b011,
+    F3_XORI  = 3'b100,
+    F3_ORI   = 3'b110,
+    F3_ANDI  = 3'b111,
+    F3_SLLI  = 3'b001,
+    F3_SRLI_SRAI = 3'b101
+  } i_funct3;
+
+  typedef enum logic [2:0] {
+    F3_BEQ   = 3'b000,
+    F3_BNE   = 3'b001,
+    F3_BLT   = 3'b100,
+    F3_BGE   = 3'b101,
+    F3_BLTU  = 3'b110,
+    F3_BGEU  = 3'b111
+  } b_funct3;
+
+  typedef enum logic [2:0] {
+    F3_LB  = 3'b000,
+    F3_LH  = 3'b001,
+    F3_LW  = 3'b010,
+    F3_LBU = 3'b100,
+    F3_LHU = 3'b101
+  } l_funct3;
+
+  typedef enum logic [2:0] {
+    F3_SB = 3'b000,
+    F3_SH = 3'b001,
+    F3_SW = 3'b010
+  } s_funct3;
+
+  typedef struct packed {
+    logic  ALU;
+    logic  MEM;
+  } issue_t;
+
 
   typedef enum logic [3:0] {
       ALU_ADD   = 4'b0000,
@@ -52,27 +129,6 @@ package riscv_pkg;
       IMM_S    = 3'b100,   // S-type operations
       IMM_B    = 3'b101    // B-type operations
   } imm_src_e;
-
-  //r_cd, m_cd1, m_cd2, m_cd3
-  typedef enum logic [CTRLB_LEN-1:0] {
-      CTRL_REG_WRITE   = 'b1_0_00_1,   // add, sub
-      CTRL_REG_WRITE_I = 'b1_1_00_1,   // addi
-      CTRL_JUMP_LINK   = 'b1_0_10_1,   // jal
-      CTRL_JALR        = 'b1_1_10_1,   // jalr
-      CTRL_BRANCH      = 'b0_0_00_1,   // branch
-      CTRL_AUIPC       = 'b1_1_00_0,   // auipc 
-      CTRL_LOAD        = 'b1_1_01_1,   // lw
-      CTRL_STORE       = 'b0_1_00_1,   // sw
-      CTRL_NONE        = 'b0_0_11_1
-  } ctrl_e;
-
-  typedef enum logic [2:0] {
-      P_B  = 3'b000,     // load-read byte
-      P_H  = 3'b001,     // load-read half    
-      P_W  = 3'b010,     // load-read word
-      P_BU = 3'b100,     // load byte unsigned
-      P_HU = 3'b101      // load half unsigned
-  } datam_e;
 
 
   // ----------------------
@@ -1024,59 +1080,7 @@ package riscv_pkg;
     endcase
   endfunction
 
-    localparam F3_BEQ   = 3'b000;
-    localparam F3_BNE   = 3'b001;
-    localparam F3_BLT   = 3'b100;
-    localparam F3_BGE   = 3'b101;
-    localparam F3_BLTU  = 3'b110;
-    localparam F3_BGEU  = 3'b111;
     
-    localparam F3_LB  = 3'b000;
-    localparam F3_LH  = 3'b001;
-    localparam F3_LW  = 3'b010;
-    localparam F3_LBU = 3'b100;
-    localparam F3_LHU = 3'b101;
-    
-    localparam F3_SB = 3'b000;
-    localparam F3_SH = 3'b001;
-    localparam F3_SW = 3'b010;
-    
-    localparam F3_ADDI = 3'b000;
-    localparam F3_SLTI = 3'b010;
-    localparam F3_SLTIU= 3'b011;
-    localparam F3_XORI = 3'b100;
-    localparam F3_ORI  = 3'b110;
-    localparam F3_ANDI = 3'b111;
-    localparam F3_SLLI = 3'b001;
-    localparam F3_SRLI = 3'b101;
-    localparam F3_SRAI = 3'b101;
-    localparam F3_JALR = 3'b000;
-
-    localparam F7_SLLI = 7'b0000000;
-    localparam F7_SRLI = 7'b0000000;
-    localparam F7_SRAI = 7'b0100000;
-
-    localparam F3_ADD  = 3'b000;
-    localparam F3_SUB  = 3'b000;
-    localparam F3_SLL  = 3'b001;
-    localparam F3_SLT  = 3'b010;
-    localparam F3_SLTU = 3'b011;
-    localparam F3_XOR  = 3'b100;
-    localparam F3_SRL  = 3'b101;
-    localparam F3_SRA  = 3'b101;
-    localparam F3_OR   = 3'b110;
-    localparam F3_AND  = 3'b111;
-
-    localparam F7_ADD  = 7'b0000000;
-    localparam F7_SUB  = 7'b0100000;
-    localparam F7_SLL  = 7'b0000000;
-    localparam F7_SLT  = 7'b0000000;
-    localparam F7_SLTU = 7'b0000000;
-    localparam F7_XOR  = 7'b0000000;
-    localparam F7_SRL  = 7'b0000000;
-    localparam F7_SRA  = 7'b0100000;
-    localparam F7_OR   = 7'b0000000;
-    localparam F7_AND  = 7'b0000000;
 
   // trace log compatible to spikes commit log feature
   // pragma translate_off
