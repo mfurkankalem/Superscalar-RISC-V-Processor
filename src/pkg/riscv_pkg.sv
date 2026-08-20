@@ -19,8 +19,66 @@ package riscv_pkg;
 
   localparam INST_START    = 32'h80000000;
 
+  typedef enum logic [16:0] {
+    // R-type
+    ADD   = 17'b0110011_000_0000000,
+    SUB   = 17'b0110011_000_0100000,
+    AND   = 17'b0110011_111_0000000,
+    OR    = 17'b0110011_110_0000000,
+    XOR   = 17'b0110011_100_0000000,
+    SLL   = 17'b0110011_001_0000000,
+    SLT   = 17'b0110011_010_0000000,
+    SLTU  = 17'b0110011_011_0000000,
+    SRL   = 17'b0110011_101_0000000,
+    SRA   = 17'b0110011_101_0100000,
+
+    // I-type
+    ADDI  = 17'b0010011_000_???????,
+    ORI   = 17'b0010011_110_???????,
+    ANDI  = 17'b0010011_111_???????,
+    XORI  = 17'b0010011_100_???????,
+    SLTI  = 17'b0010011_010_???????,
+    SLTIU = 17'b0010011_011_???????,
+    SLLI  = 17'b0010011_001_0000000,
+    SRLI  = 17'b0010011_101_0000000,
+    SRAI  = 17'b0010011_101_0100000,
+
+    // Load
+    LB    = 17'b0000011_000_???????,
+    LH    = 17'b0000011_001_???????,
+    LW    = 17'b0000011_010_???????,
+    LBU   = 17'b0000011_100_???????,
+    LHU   = 17'b0000011_101_???????,
+
+    // Store
+    SB    = 17'b0100011_000_???????,
+    SH    = 17'b0100011_001_???????,
+    SW    = 17'b0100011_010_???????,
+
+    // Branch
+    BEQ   = 17'b1100011_000_???????,
+    BNE   = 17'b1100011_001_???????,
+    BLT   = 17'b1100011_100_???????,
+    BGE   = 17'b1100011_101_???????,
+    BLTU  = 17'b1100011_110_???????,
+    BGEU  = 17'b1100011_111_???????,
+
+    // Jump
+    JALR  = 17'b1100111_000_???????,
+    JAL   = 17'b1101111_???_???????,
+
+    // U-type
+    LUI   = 17'b0110111_???_???????,
+    AUIPC = 17'b0010111_???_???????,
+
+    // Misc-mem / system
+    FENCE = 17'b0001111_000_???????,
+    SYS   = 17'b1110011_000_0000000
+  } opnames_t;
+
   typedef struct packed {
-    logic [6:0] op;
+    opnames_t    opname;
+    logic [6:0]  op;
     logic [4:0]  rd;
     logic [2:0]  funct3;
     logic [4:0]  rs1;
@@ -29,13 +87,17 @@ package riscv_pkg;
     logic [24:0] imm;
   } instruct_t;
   
+
+
   typedef enum logic [6:0] {
     OP_RTYPE = 7'b1010011,
     OP_ITYPE = 7'b0010011,
     OP_BTYPE = 7'b1100011,
-    OP_UTYPE = 7'b0110111,
-    OP_JTYPE = 7'b1101111,
-    OP_STYPE = 7'b0100011,
+    OP_LUI   = 7'b0110111,
+    OP_AUIPC = 7'b0010111,
+    OP_JAL   = 7'b1101111,
+    OP_JALR  = 7'b1100111,
+    OP_STYPE = 7'b0100011,  
     OP_LTYPE = 7'b0000011
   } opcode_e;
 
@@ -45,7 +107,7 @@ package riscv_pkg;
     F3_SLT     = 3'b010,
     F3_SLTU    = 3'b011,
     F3_XOR     = 3'b100,
-    F3_SRL_SRA = 3'b101,
+    F3_SR      = 3'b101,
     F3_OR      = 3'b110,
     F3_AND     = 3'b111
   } r_funct3;
@@ -64,16 +126,7 @@ package riscv_pkg;
   localparam F7_SRLI = 7'b0000000;
   localparam F7_SRAI = 7'b0100000;
 
-  typedef enum logic [2:0] {
-    F3_ADDI  = 3'b000,
-    F3_SLTI  = 3'b010,
-    F3_SLTIU = 3'b011,
-    F3_XORI  = 3'b100,
-    F3_ORI   = 3'b110,
-    F3_ANDI  = 3'b111,
-    F3_SLLI  = 3'b001,
-    F3_SRLI_SRAI = 3'b101
-  } i_funct3;
+
 
   typedef enum logic [2:0] {
     F3_BEQ   = 3'b000,
@@ -98,6 +151,7 @@ package riscv_pkg;
     F3_SW = 3'b010
   } s_funct3;
 
+
   typedef struct packed {
     logic  ALU;
     logic  MEM;
@@ -118,17 +172,10 @@ package riscv_pkg;
       ALU_CLZ   = 4'b1010,
       ALU_CTZ   = 4'b1011,
       ALU_CPOP  = 4'b1100,
+      ALU_INVALID = 4'b1101,
       ALU_NONE  = 4'b1111
-  } alu_op_e;
+  } alu_op_t;
 
-  typedef enum logic [2:0] {
-      IMM_NONE = 3'b000,   // R-type: no immediate
-      IMM_I    = 3'b001,   // I-type operations
-      IMM_J    = 3'b010,   // J-type operations
-      IMM_U    = 3'b011,   // U-type operations
-      IMM_S    = 3'b100,   // S-type operations
-      IMM_B    = 3'b101    // B-type operations
-  } imm_src_e;
 
 
   // ----------------------
