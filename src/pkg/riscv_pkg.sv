@@ -90,7 +90,7 @@ package riscv_pkg;
 
 
   typedef enum logic [6:0] {
-    OP_RTYPE = 7'b1010011,
+    OP_RTYPE = 7'b0110011,
     OP_ITYPE = 7'b0010011,
     OP_BTYPE = 7'b1100011,
     OP_LUI   = 7'b0110111,

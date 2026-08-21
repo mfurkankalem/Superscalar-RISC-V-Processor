@@ -70,7 +70,7 @@ assign decoded_d = decode_function(instr_d);
 assign imm_d =immediate_function(decoded_d.op, decoded_d.imm);
 
 always_comb begin
-    if(!register_busy[decoded_d.rd]) begin
+    if((!register_busy[decoded_d.rs1])||(!register_busy[decoded_d.rs2])) begin
         if(decoded_d.op == OP_LTYPE || decoded_d.op == OP_STYPE) begin
             decode_result.ALU = 1'b0;
             decode_result.MEM = 1'b1;
@@ -96,6 +96,7 @@ always_ff @(posedge clk) begin
                 pc_alu <= pc_d;
                 instr_alu <= decoded_d;
                 imm_alu <= imm_d;
+                register_busy[decoded_d.rd] <= 1'b1;
             end
             else if(decode_result.MEM) begin
                 MEMr_rd1 <= register[decoded_d.rs1];
@@ -103,26 +104,18 @@ always_ff @(posedge clk) begin
                 pc_mem <= pc_d;
                 instr_mem <= decoded_d;
                 imm_mem <= imm_d;
+                if (!(instr_mem.op == OP_STYPE))
+                register_busy[decoded_d.rd] <= 1'b1;
             end
         end
     end
 end
 
-// later
-always @(negedge clk) begin
-    if(r_cd==1) begin
-      if(decoded_w.rd==0)
-        register[0] <= 0;
-      else
-      register[decoded_w.rd] <= r_wd3;
-    end
-end
 
 // ====== ALU Issue Stage ======================================================
 logic [XLEN-1:0] pc_alu, imm_alu, alu_in1, alu_in2, alu_out;
 instruct_t instr_alu;
 alu_op_t alu_op;
-assign register_busy[instr_alu.rd] = 1'b1;
 assign alu_op = alu_op_e(instr_alu.op, instr_alu.funct3, instr_alu.funct7);
 
 always_comb begin
@@ -139,26 +132,39 @@ end
 
 assign alu_out = alu_result(alu_in1, alu_in2, alu_op);
 
-
+always_ff @(posedge clk) begin
+    alu_w       <= alu_out;
+    instr_alu_w <= instr_alu;
+    pc_alu_w    <= pc_alu;
+end
 
 
 // ====== MEM Issue Stage ======================================================
-logic [XLEN-1:0] pc_mem, imm_mem;
+logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2;
 instruct_t instr_mem;
-assign register_busy[instr_mem.rd] = 1'b1;
 
-
+assign 
 
 
 // ====== Writeback Stage =====================================================
-logic [XLEN-1:0] pc_w;
-instruct_t decoded_w;
-assign decoded_w = decode_function(instr_d);
+logic [XLEN-1:0] pc_w, alu_w, pc_alu_w, r_wd3;
+instruct_t instr_alu_w;
+logic [4:0] writeback_rd;
+
+assign r_wd3 = alu_w;
+assign writeback_rd = instr_alu_w.rd; 
+
+always @(negedge clk) begin
+      if(writeback_rd==0)
+        register[0] <= 0;
+      else
+      register[writeback_rd] <= r_wd3;
+      register_busy[writeback_rd] <= 1'b0;
+end
+
 
 
 // ====== Commit Stage ========================================================
-logic r_cd = 0;
-logic [XLEN-1:0] r_wd3 = 0;
 
 
 // ====== Fake Stage ==========================================================
@@ -203,14 +209,7 @@ input logic [6:0] funct7);
     case(op)
         OP_ITYPE: begin
             case(funct3)
-                F3_ADD: begin
-                    if(funct7 == F7_ADD)
-                        alu_op_e = ALU_ADD;
-                    else if(funct7 == F7_SUB)
-                        alu_op_e = ALU_SUB;
-                    else
-                        alu_op_e = ALU_INVALID;
-                end
+                F3_ADD: alu_op_e = ALU_ADD;
                 F3_SLL: alu_op_e = ALU_SLL;
                 F3_SLT: alu_op_e = ALU_SLT;
                 F3_SLTU: alu_op_e = ALU_SLTU;

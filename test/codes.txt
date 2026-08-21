@@ -8,3 +8,4 @@ addi x5, x5, 2
 sw x5, 1(x0)
 lw x4, 0(x0)
 lw x3, 1(x0)
+addi x8, x0, 1
