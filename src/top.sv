@@ -63,7 +63,7 @@ end
 logic [XLEN-1:0] pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
 logic [XLEN-1:0] register [0:XLEN-1];   //register file
 logic [XLEN-1:0] register_busy;
-logic [XLEN-1:0] ROB [0:XLEN-1];
+rob_t ROB [0:XLEN-1];
 logic [4:0] rob_stack_count; 
 instruct_t  decoded_d;
 issue_t decode_result;
@@ -101,7 +101,8 @@ always_ff @(posedge clk) begin
                 imm_alu <= imm_d;
                 register_busy[decoded_d.rd] <= 1'b1;
                 rob_stack_count <= rob_stack_count+1;
-                ROB [rob_stack_count] <= pc_d;
+                ROB [rob_stack_count].pc <= pc_d;
+                ROB [rob_stack_count].valid <= 1;
             end
             else if(decode_result.MEM) begin
                 MEMr_rd1 <= register[decoded_d.rs1];
@@ -170,8 +171,22 @@ end
 logic [XLEN-1:0] r_wd3; 
 logic [4:0] commit_rd;
 
-assign r_wd3 = prf_alu.value;
-assign commit_rd = prf_alu.rd;
+
+always_ff @(posedge clk) begin
+    if ((prf_alu.pc == ROB[0].pc) && ROB[0].valid) begin
+        r_wd3     <= prf_alu.value;
+        commit_rd <= prf_alu.rd;
+        for (int i = 0; i < 31; i++) begin
+            ROB[i] <= ROB[i+1];
+        end
+        rob_stack_count <= rob_stack_count-1;
+        ROB[31] <= '0;  
+    end
+    else begin
+        r_wd3     <= 0;
+        commit_rd <= 0;
+    end
+end
 
 always_ff @(negedge clk) begin
       if(commit_rd==0)

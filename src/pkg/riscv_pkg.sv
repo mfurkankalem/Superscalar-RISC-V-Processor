@@ -19,6 +19,17 @@ package riscv_pkg;
 
   localparam INST_START    = 32'h80000000;
 
+  typedef struct packed{
+    logic [XLEN-1:0]  pc;
+    logic [4:0]       rd;
+    logic [XLEN-1:0]  value;
+  } prf_t;
+
+  typedef struct packed{
+    logic             valid;
+    logic [XLEN-1:0]  pc;
+  } rob_t;
+
   typedef enum logic [16:0] {
     // R-type
     ADD   = 17'b0110011_000_0000000,
@@ -177,11 +188,7 @@ package riscv_pkg;
   } alu_op_t;
 
 
-  typedef struct packed{
-    logic [XLEN-1:0]  pc;
-    logic [4:0]       rd;
-    logic [XLEN-1:0]  value;
-  } prf_t;
+
   // ----------------------
   // Import cva6 config from cva6_config_pkg
   // ----------------------
