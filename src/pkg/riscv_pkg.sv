@@ -177,7 +177,11 @@ package riscv_pkg;
   } alu_op_t;
 
 
-
+  typedef struct packed{
+    logic [XLEN-1:0]  pc;
+    logic [4:0]       rd;
+    logic [XLEN-1:0]  value;
+  } prf_t;
   // ----------------------
   // Import cva6 config from cva6_config_pkg
   // ----------------------

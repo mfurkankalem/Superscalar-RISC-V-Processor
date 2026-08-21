@@ -63,6 +63,8 @@ end
 logic [XLEN-1:0] pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
 logic [XLEN-1:0] register [0:XLEN-1];   //register file
 logic [XLEN-1:0] register_busy;
+logic [XLEN-1:0] ROB [0:XLEN-1];
+logic [4:0] rob_stack_count; 
 instruct_t  decoded_d;
 issue_t decode_result;
 
@@ -70,7 +72,8 @@ assign decoded_d = decode_function(instr_d);
 assign imm_d =immediate_function(decoded_d.op, decoded_d.imm);
 
 always_comb begin
-    if((!register_busy[decoded_d.rs1])||(!register_busy[decoded_d.rs2])) begin
+    if((!register_busy[decoded_d.rs1])&&(!register_busy[decoded_d.rs2])&&
+    (decoded_d.rd>0)) begin
         if(decoded_d.op == OP_LTYPE || decoded_d.op == OP_STYPE) begin
             decode_result.ALU = 1'b0;
             decode_result.MEM = 1'b1;
@@ -97,6 +100,8 @@ always_ff @(posedge clk) begin
                 instr_alu <= decoded_d;
                 imm_alu <= imm_d;
                 register_busy[decoded_d.rd] <= 1'b1;
+                rob_stack_count <= rob_stack_count+1;
+                ROB [rob_stack_count] <= pc_d;
             end
             else if(decode_result.MEM) begin
                 MEMr_rd1 <= register[decoded_d.rs1];
@@ -143,28 +148,38 @@ end
 logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2;
 instruct_t instr_mem;
 
-assign 
 
 
 // ====== Writeback Stage =====================================================
-logic [XLEN-1:0] pc_w, alu_w, pc_alu_w, r_wd3;
+logic [XLEN-1:0] alu_w, pc_alu_w;
 instruct_t instr_alu_w;
-logic [4:0] writeback_rd;
 
-assign r_wd3 = alu_w;
-assign writeback_rd = instr_alu_w.rd; 
+prf_t prf_alu;
 
-always @(negedge clk) begin
-      if(writeback_rd==0)
-        register[0] <= 0;
-      else
-      register[writeback_rd] <= r_wd3;
-      register_busy[writeback_rd] <= 1'b0;
+always_ff @(posedge clk) begin
+    prf_alu.pc      <= pc_alu_w;
+    prf_alu.rd      <= instr_alu_w.rd;
+    prf_alu.value   <= alu_w;
 end
 
 
 
+
+
 // ====== Commit Stage ========================================================
+logic [XLEN-1:0] r_wd3; 
+logic [4:0] commit_rd;
+
+assign r_wd3 = prf_alu.value;
+assign commit_rd = prf_alu.rd;
+
+always_ff @(negedge clk) begin
+      if(commit_rd==0)
+        register[0] <= 0;
+      else
+      register[commit_rd] <= r_wd3;
+      register_busy[commit_rd] <= 1'b0;
+end
 
 
 // ====== Fake Stage ==========================================================
