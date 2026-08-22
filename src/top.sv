@@ -8,7 +8,7 @@ module top import riscv_pkg::*;
     ) (
         input logic test_i, //test
         input logic clk,
-        input logic rstn_i, // system reset //??
+        input logic rstn_i, // system reset 
         input logic [XLEN-1:0] addr_i, // data memory report
         output logic update_o, // log update signal
         output logic [XLEN-1:0] pc_o, // log program counter
@@ -17,7 +17,7 @@ module top import riscv_pkg::*;
         output logic [XLEN-1:0] reg_data_o, // log register data
         output logic [XLEN-1:0] mem_addr_o, // retired memory address
         output logic [7:0] data_o [0:XLEN-1], // data memory write
-        output logic [XLEN-1:0] mem_data_o // retired memory data //imem için kullanılacak
+        output logic [XLEN-1:0] mem_data_o // retired memory data 
         
     );
 
@@ -71,16 +71,26 @@ issue_t decode_result;
 assign decoded_d = decode_function(instr_d);
 assign imm_d =immediate_function(decoded_d.op, decoded_d.imm);
 
+
 always_comb begin
-    if((!register_busy[decoded_d.rs1])&&(!register_busy[decoded_d.rs2])&&
-    (decoded_d.rd>0)) begin
-        if(decoded_d.op == OP_LTYPE || decoded_d.op == OP_STYPE) begin
+    if((!register_busy[decoded_d.rs1])&&(!register_busy[decoded_d.rs2])) begin
+        if(decoded_d.op == OP_STYPE) begin
             decode_result.ALU = 1'b0;
             decode_result.MEM = 1'b1;
         end
-        else begin
+        else if(decoded_d.rd>0) begin
+            if (decoded_d.op == OP_LTYPE) begin
+            decode_result.ALU = 1'b0;
+            decode_result.MEM = 1'b1;
+            end
+            else begin
             decode_result.MEM = 1'b0;
             decode_result.ALU = 1'b1;
+            end
+        end
+        else begin
+            decode_result.ALU = 1'b0;
+            decode_result.MEM = 1'b0;
         end
     end 
     else begin
@@ -112,6 +122,9 @@ always_ff @(posedge clk) begin
                 imm_mem <= imm_d;
                 if (!(instr_mem.op == OP_STYPE))
                 register_busy[decoded_d.rd] <= 1'b1;
+                rob_stack_count <= rob_stack_count+1;
+                ROB [rob_stack_count].pc <= pc_d;
+                ROB [rob_stack_count].valid <= 1;
             end
         end
     end
@@ -146,21 +159,75 @@ end
 
 
 // ====== MEM Issue Stage ======================================================
-logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2;
+logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2, mem_op_out;
 instruct_t instr_mem;
+alu_op_t mem_op;
+assign mem_op = alu_op_e(instr_mem.op, instr_mem.funct3, instr_mem.funct7);
+
+assign mem_in1 = MEMr_rd1;
+assign mem_in2 = imm_mem;
+assign mem_op_out = alu_result(mem_in1, mem_in2, mem_op);
+
+always_ff @(posedge clk) begin
+    mem_read_in1        <= mem_op_out;
+    mem_read_in2        <= MEMr_rd2;
+    pc_mem_read         <= pc_mem;
+    instr_mem_read      <= instr_mem;
+end 
 
 
+// ====== MEM Read Stage ======================================================
+logic [XLEN-1:0] pc_mem_read, mem_read_in1, mem_read_in2, data_read_out;
+instruct_t instr_mem_read;
+logic [7:0] data_byte_cache [0:XLEN-1]; // 32 byte data cache
+logic [XLEN-1:0] data_word_address;
+logic dm_cd = 0;
+
+assign data_word_address = mem_read_in1 - (mem_read_in1 % 4);
+data_memory data_memory_0(.clk(clk), .dm_a(data_word_address), .dm_rd(data_read_out),
+.dm_wd(mem_read_in2), .dm_cd(dm_cd)); // read memory
+
+always_ff @(negedge clk) begin
+    if (instr_mem_read.op == OP_LTYPE) begin
+    if (data_read_out[7:0] != data_byte_cache[data_word_address]) begin
+        for (int i=0; i < 4; i = i + 1) begin 
+            data_byte_cache[data_word_address + i] <= data_read_out[i*8 +: 8];
+        end
+    end
+    end
+end
+
+
+always_comb begin
+    if (instr_mem_read.op == OP_STYPE) begin
+        casez (instr_mem_read.funct3) 
+                F3_SB: data_byte_cache[mem_read_in1] = mem_read_in2[7:0];
+                F3_SH: begin data_byte_cache[mem_read_in1] = mem_read_in2[7:0]; data_byte_cache[mem_read_in1+1] = mem_read_in2[15:8]; end
+                F3_SW: begin data_byte_cache[mem_read_in1] = mem_read_in2[7:0]; data_byte_cache[mem_read_in1] = mem_read_in2[15:8];
+                    data_byte_cache[mem_read_in1+2] = mem_read_in2[23:16]; data_byte_cache[mem_read_in1+3] = mem_read_in2[31:24]; end
+                default: data_byte_cache[mem_read_in1] = data_byte_cache[mem_read_in1];
+        endcase
+    end
+    else
+    data_byte_cache[mem_read_in1] = data_byte_cache[mem_read_in1];
+end
+
+always_ff @(posedge clk) begin
+    mem_w       <= data_word_address; //değişicek
+    instr_mem_w <= instr_mem_read;
+    pc_mem_w    <= pc_mem_read;
+end
 
 // ====== Writeback Stage =====================================================
-logic [XLEN-1:0] alu_w, pc_alu_w;
-instruct_t instr_alu_w;
-
-prf_t prf_alu;
+logic [XLEN-1:0] alu_w, pc_alu_w, mem_w, pc_mem_w;
+instruct_t instr_alu_w, instr_mem_w;
+prf_t prf_alu, prf_mem;
 
 always_ff @(posedge clk) begin
     prf_alu.pc      <= pc_alu_w;
     prf_alu.rd      <= instr_alu_w.rd;
     prf_alu.value   <= alu_w;
+    prf_mem.pc      <= mem_w;
 end
 
 
