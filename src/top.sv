@@ -25,9 +25,9 @@ module top
   logic en_f;
   logic en_d;
   logic en_m;
-  logic flush_d = 0;
+  logic flush_d;
 
- 
+
 
   // ====== Fetch Stage ==========================================================
   logic startvalue;
@@ -51,17 +51,23 @@ module top
       if (en_f) begin
         if (startvalue) begin
 
-          if (pc_f >= INST_START) begin
-            pc_f <= pc_f+4;
+          if (pc_src > 0) begin
+            pc_f    <= pc_src;
+						pc_d <= 0;
+						instr_d <= 0;
+            end
+          else  if (pc_f >= INST_START) begin
+            pc_f <= pc_f + 4;
             pc_d <= pc_f;
             instr_d <= instruction_cache[pc_f[6:2]];
           end
-        end else begin
+        end 
+        
+        else begin
           pc_f <= INST_START;
           startvalue <= 1;
         end
-      end
-      else begin
+      end else begin
         pc_f <= pc_f;
         pc_d <= pc_d;
         instr_d <= instr_d;
@@ -83,9 +89,12 @@ module top
 
 
   always_comb begin
-    if ((!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2])) begin
-        en_f = 1;
-        en_d = 1;
+    if (((!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2]))
+		|| ((!register_busy[decoded_d.rs1]) && ((decoded_d.op == OP_ITYPE)||
+		(decoded_d.op == OP_LUI) || (decoded_d.op == OP_AUIPC) ||
+		(decoded_d.op == OP_JAL) || (decoded_d.op == OP_JALR) ))) begin
+      en_f = 1;
+      en_d = 1;
       if (decoded_d.op == OP_STYPE) begin
         decode_result.ALU = 1'b0;
         decode_result.MEM = 1'b1;
@@ -119,7 +128,7 @@ module top
           pc_alu <= pc_d;
           instr_alu <= decoded_d;
           imm_alu <= imm_d;
-          if (decoded_d.rd>0) register_busy[decoded_d.rd] <= 1'b1;
+          if (decoded_d.rd > 0) register_busy[decoded_d.rd] <= 1'b1;
           rob_stack_count <= rob_stack_count + 1;
           ROB[rob_stack_count].pc <= pc_d;
           ROB[rob_stack_count].valid <= 1;
@@ -129,10 +138,9 @@ module top
           pc_mem <= pc_d;
           instr_mem <= decoded_d;
           imm_mem <= imm_d;
-          if (instr_mem.op == OP_LTYPE)  
-          begin if(decoded_d.rd>0) 
-          register_busy[decoded_d.rd] <= 1'b1;end
-          else begin
+          if (instr_mem.op == OP_LTYPE) begin
+            if (decoded_d.rd > 0) register_busy[decoded_d.rd] <= 1'b1;
+          end else begin
             cache_busy[decoded_d.rs1] <= 1'b1;
           end
           rob_stack_count <= rob_stack_count + 1;
@@ -140,14 +148,27 @@ module top
           ROB[rob_stack_count].valid <= 1;
         end
       end
+			else begin
+				ALUr_rd1 <= 0;
+				ALUr_rd2 <= 0;
+				pc_alu <= 0;
+				instr_alu <= 0;
+				imm_alu <= 0;
+				MEMr_rd1 <= 0;
+				MEMr_rd2 <= 0;
+				pc_mem <= 0;
+				instr_mem <= 0;
+				imm_mem <= 0;
+			end
     end
   end
 
 
   // ====== ALU Issue Stage ======================================================
-  logic [XLEN-1:0] pc_alu, imm_alu, alu_in1, alu_in2, alu_out;
+  logic [XLEN-1:0] pc_alu, imm_alu, alu_in1, alu_in2, alu_out, pc_src;
+  logic pc_redirect;
   instruct_t instr_alu;
-  alu_op_t   alu_op;
+  alu_op_t alu_op;
   assign alu_op = alu_op_e(instr_alu.op, instr_alu.funct3, instr_alu.funct7);
 
   always_comb begin
@@ -159,6 +180,35 @@ module top
   end
 
   assign alu_out = alu_result(alu_in1, alu_in2, alu_op);
+
+  always_comb begin
+    pc_redirect = 1'b0;
+    if (instr_alu.op == OP_BTYPE) begin
+      case (instr_alu.funct3)
+        F3_BEQ:  pc_redirect = (alu_out == 32'd0);  // BEQ
+        F3_BNE:  pc_redirect = (alu_out != 32'd0);  // BNE
+        F3_BLT:  pc_redirect = (alu_out == 32'd1);  // BLT
+        F3_BGE:  pc_redirect = (alu_out == 32'd0);  // BGE
+        F3_BLTU: pc_redirect = (alu_out == 32'd1);  // BLTU
+        F3_BGEU: pc_redirect = (alu_out == 32'd0);  // BGEU
+        default: pc_redirect = 1'b0;
+      endcase
+    end
+    if (pc_redirect) begin
+      if ($signed(imm_alu) < 0) pc_src = pc_alu + ($signed(imm_alu));
+      else pc_src = pc_alu + imm_alu;
+			flush_d = 1;
+			en_d = 0;
+			en_f = 0;
+    end else begin
+      pc_src = 0;
+			en_d = 1;
+			en_f = 1;
+			flush_d = 0;
+    end
+
+  end
+
 
   always_ff @(posedge clk) begin
     alu_w       <= alu_out;
@@ -176,25 +226,24 @@ module top
   assign mem_in1 = MEMr_rd1;
   assign mem_in2 = imm_mem;
   assign mem_op_out = alu_result(mem_in1, mem_in2, mem_op);
-  
+
   always_comb begin
-    if(cache_busy[decoded_d.rd])begin
-        en_m = 0;
-        en_d = 0;
-        en_f = 0;
+    if (cache_busy[decoded_d.rd]) begin
+      en_m = 0;
+      en_d = 0;
+      en_f = 0;
+    end else begin
+      en_m = 1;
+      en_d = 1;
+      en_f = 1;
     end
-    else begin
-        en_m = 1;
-        en_d = 1;
-        en_f = 1;
-  end
   end
   always_ff @(posedge clk) begin
-    if(en_m) begin
-    mem_read_in1   <= mem_op_out;
-    mem_read_in2   <= MEMr_rd2;
-    pc_mem_read    <= pc_mem;
-    instr_mem_read <= instr_mem;
+    if (en_m) begin
+      mem_read_in1   <= mem_op_out;
+      mem_read_in2   <= MEMr_rd2;
+      pc_mem_read    <= pc_mem;
+      instr_mem_read <= instr_mem;
     end
   end
 
@@ -325,7 +374,7 @@ module top
   always_ff @(negedge clk) begin
     if (commit_rd == 0) register[0] <= 0;
     else register[commit_rd] <= r_wd3;
-    if (commit_rd>0)register_busy[commit_rd] <= 1'b0;
+    register_busy[commit_rd] <= 1'b0;
   end
 
   // ====== Decode Functions =====================================================
