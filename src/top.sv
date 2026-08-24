@@ -53,17 +53,14 @@ module top
 
           if (pc_src > 0) begin
             pc_f    <= pc_src;
-						pc_d <= 0;
-						instr_d <= 0;
-            end
-          else  if (pc_f >= INST_START) begin
+            pc_d <= 0;
+            instr_d <= 0;
+          end else if (pc_f >= INST_START) begin
             pc_f <= pc_f + 4;
             pc_d <= pc_f;
             instr_d <= instruction_cache[pc_f[6:2]];
           end
-        end 
-        
-        else begin
+        end else begin
           pc_f <= INST_START;
           startvalue <= 1;
         end
@@ -98,18 +95,19 @@ module top
       if (decoded_d.op == OP_STYPE) begin
         decode_result.ALU = 1'b0;
         decode_result.MEM = 1'b1;
-      end else if (decoded_d.rd > 0) begin
+      end else begin
         if (decoded_d.op == OP_LTYPE) begin
           decode_result.ALU = 1'b0;
           decode_result.MEM = 1'b1;
-        end else begin
+        end else if (decoded_d.op == 0) begin
+          decode_result.ALU = 1'b0;
+          decode_result.MEM = 1'b0;
+        end
+        else begin
           decode_result.MEM = 1'b0;
           decode_result.ALU = 1'b1;
         end
-      end else begin
-        decode_result.ALU = 1'b0;
-        decode_result.MEM = 1'b0;
-      end
+      end 
     end else begin
       en_f = 0;
       en_d = 0;
@@ -147,19 +145,18 @@ module top
           ROB[rob_stack_count].pc <= pc_d;
           ROB[rob_stack_count].valid <= 1;
         end
+      end else begin
+        ALUr_rd1 <= 0;
+        ALUr_rd2 <= 0;
+        pc_alu <= 0;
+        instr_alu <= 0;
+        imm_alu <= 0;
+        MEMr_rd1 <= 0;
+        MEMr_rd2 <= 0;
+        pc_mem <= 0;
+        instr_mem <= 0;
+        imm_mem <= 0;
       end
-			else begin
-				ALUr_rd1 <= 0;
-				ALUr_rd2 <= 0;
-				pc_alu <= 0;
-				instr_alu <= 0;
-				imm_alu <= 0;
-				MEMr_rd1 <= 0;
-				MEMr_rd2 <= 0;
-				pc_mem <= 0;
-				instr_mem <= 0;
-				imm_mem <= 0;
-			end
     end
   end
 
@@ -194,23 +191,35 @@ module top
         default: pc_redirect = 1'b0;
       endcase
     end
+		else if ((instr_alu.op == OP_JAL) || (instr_alu.op == OP_JALR)) begin
+		pc_redirect = 1'b1;
+		end
+
     if (pc_redirect) begin
-      if ($signed(imm_alu) < 0) pc_src = pc_alu + ($signed(imm_alu));
+      flush_d = 1;
+      en_d = 0;
+      en_f = 0;
+			if (instr_alu.op == OP_JALR) begin
+				pc_src = alu_out;		
+			end
+			else begin
+			if ($signed(imm_alu) < 0) pc_src = pc_alu + ($signed(imm_alu));
       else pc_src = pc_alu + imm_alu;
-			flush_d = 1;
-			en_d = 0;
-			en_f = 0;
+			end
     end else begin
       pc_src = 0;
-			en_d = 1;
-			en_f = 1;
-			flush_d = 0;
+      en_d = 1;
+      en_f = 1;
+      flush_d = 0;
     end
 
   end
 
 
   always_ff @(posedge clk) begin
+    if(pc_redirect)
+    alu_w       <= pc_alu;
+    else
     alu_w       <= alu_out;
     instr_alu_w <= instr_alu;
     pc_alu_w    <= pc_alu;
@@ -399,7 +408,7 @@ module top
       OP_LUI:   immediate_function = {imm[24:5], 12'b0};
       OP_AUIPC: immediate_function = {imm[24:5], 12'b0};
       OP_JAL:   immediate_function = {{11{imm[24]}}, imm[24], imm[12:5], imm[13], imm[23:14], 1'b0};
-      OP_JALR:  immediate_function = {{11{imm[24]}}, imm[24], imm[12:5], imm[13], imm[23:14], 1'b0};
+      OP_JALR:  immediate_function = {{20{imm[24]}}, imm[24:13]};
       default:  immediate_function = '0;
     endcase
   endfunction
