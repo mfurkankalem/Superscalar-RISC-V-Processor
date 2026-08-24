@@ -1,8 +1,20 @@
-jal  x1, 12
-addi x2, x0, 99
-addi x3, x0, 99
-jalr x3, 16(x1)
-addi x2, x0, 2
-addi x3, x0, 3
-addi  x4, x2, 4
-nop
+jal   x1, 12
+addi  x2, x0, 99
+addi  x2, x0, 99
+addi  x2, x0, 10
+addi  x3, x0, 10
+beq   x2, x3, 12
+addi  x4, x0, 111
+addi  x4, x0, 222
+addi  x4, x0, 5
+addi  x5, x0, 9
+beq   x4, x5, 12
+addi  x6, x0, 77
+jalr  x7, 56(x1)
+addi  x8, x0, 199
+addi  x8, x0, 299
+addi  x8, x0, 3
+addi  x9, x0, 3
+beq   x8, x9, 8
+addi  x10, x0, 555
+jal   x0, 0

@@ -23,6 +23,7 @@ package riscv_pkg;
     logic [XLEN-1:0]  pc;
     logic [4:0]       rd;
     logic [XLEN-1:0]  value;
+    logic [XLEN-1:0]  instr;
   } prf_t;
 
   typedef struct packed{

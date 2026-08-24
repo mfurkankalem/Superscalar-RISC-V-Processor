@@ -218,7 +218,7 @@ module top
 
   always_ff @(posedge clk) begin
     if(pc_redirect)
-    alu_w       <= pc_alu;
+    alu_w       <= pc_alu + 4;
     else
     alu_w       <= alu_out;
     instr_alu_w <= instr_alu;
@@ -342,9 +342,11 @@ module top
   always_ff @(posedge clk) begin
     prf_alu.pc    <= pc_alu_w;
     prf_alu.rd    <= instr_alu_w.rd;
+    prf_alu.instr <= {instr_alu_w.imm, instr_alu_w.op};
     prf_alu.value <= alu_w;
     prf_mem.pc    <= pc_mem_w;
     prf_mem.rd    <= instr_mem_w.rd;
+    prf_mem.instr <= {instr_mem_w.imm, instr_mem_w.op};
     prf_mem.value <= mem_w;
   end
 
@@ -359,6 +361,11 @@ module top
 
   always_ff @(negedge clk) begin
     if ((prf_alu.pc == ROB[0].pc) && ROB[0].valid) begin
+      pc_o      <= prf_alu.pc;
+      instr_o   <= prf_alu.instr;
+      reg_data_o <= prf_alu.value;
+      reg_addr_o <= prf_alu.rd;
+      update_o  <= 1;
       r_wd3     <= prf_alu.value;
       commit_rd <= prf_alu.rd;
       for (int i = 0; i < 31; i++) begin
@@ -367,6 +374,11 @@ module top
       rob_stack_count <= rob_stack_count - 1;
       ROB[31] <= '0;
     end else if ((prf_mem.pc == ROB[0].pc) && ROB[0].valid) begin
+      pc_o      <= prf_mem.pc;
+      instr_o   <= prf_mem.instr;
+      reg_data_o <= prf_mem.value;
+      reg_addr_o <= prf_mem.rd;
+      update_o  <= 1;
       r_wd3     <= prf_mem.value;
       commit_rd <= prf_mem.rd;
       for (int i = 0; i < 31; i++) begin
@@ -375,6 +387,7 @@ module top
       rob_stack_count <= rob_stack_count - 1;
       ROB[31] <= '0;
     end else begin
+      update_o  <= 0;
       r_wd3     <= 0;
       commit_rd <= 0;
     end
@@ -495,10 +508,8 @@ module top
   // ====== Others ==========================================================
 
   assign update_o = 0;
-  assign pc_o = 0;
   assign instr_o = 0;
-  assign reg_addr_o = 0;
-  assign reg_data_o = 0;
+
   assign mem_addr_o = 0;
   assign data_o[0] = 0;
   assign mem_data_o = 0;
