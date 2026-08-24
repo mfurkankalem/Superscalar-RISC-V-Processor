@@ -86,7 +86,7 @@ module top
 
 
   always_comb begin
-    if (((!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2]))
+    if (((!register_busy[decoded_d.rd]) && (!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2]))
 		|| ((!register_busy[decoded_d.rs1]) && ((decoded_d.op == OP_ITYPE)||
 		(decoded_d.op == OP_LUI) || (decoded_d.op == OP_AUIPC) ||
 		(decoded_d.op == OP_JAL) || (decoded_d.op == OP_JALR) ))) begin
@@ -218,11 +218,12 @@ module top
 
   always_ff @(posedge clk) begin
     if(pc_redirect)
-    alu_w       <= pc_alu + 4;
+    prf_alu.value       <= pc_alu + 4;
     else
-    alu_w       <= alu_out;
-    instr_alu_w <= instr_alu;
-    pc_alu_w    <= pc_alu;
+    prf_alu.value       <= alu_out;
+    prf_alu.rd <= instr_alu.rd;
+    prf_alu.pc    <= pc_alu;
+    prf_alu.instr <= {instr_alu.imm, instr_alu.op};
   end
 
 
@@ -328,35 +329,19 @@ module top
   end
 
   always_ff @(posedge clk) begin
-    mem_w       <= mem_out;  //değişicek
-    instr_mem_w <= instr_mem_read;
-    pc_mem_w    <= pc_mem_read;
+    prf_mem.value       <= mem_out;  //değişicek
+    prf_mem.rd <= instr_mem_read.rd;
+    prf_mem.pc     <= pc_mem_read;
+    prf_mem.instr <= {instr_mem.imm, instr_mem.op};
     if (instr_mem_read.op == OP_STYPE) cache_busy[instr_mem_read.rs1] <= 1'b0;
   end
-
-  // ====== Writeback Stage =====================================================
-  logic [XLEN-1:0] alu_w, pc_alu_w, mem_w, pc_mem_w;
-  instruct_t instr_alu_w, instr_mem_w;
-  prf_t prf_alu, prf_mem;
-
-  always_ff @(posedge clk) begin
-    prf_alu.pc    <= pc_alu_w;
-    prf_alu.rd    <= instr_alu_w.rd;
-    prf_alu.instr <= {instr_alu_w.imm, instr_alu_w.op};
-    prf_alu.value <= alu_w;
-    prf_mem.pc    <= pc_mem_w;
-    prf_mem.rd    <= instr_mem_w.rd;
-    prf_mem.instr <= {instr_mem_w.imm, instr_mem_w.op};
-    prf_mem.value <= mem_w;
-  end
-
-
 
 
 
   // ====== Commit Stage ========================================================
   logic [XLEN-1:0] r_wd3;
   logic [4:0] commit_rd;
+  prf_t prf_alu, prf_mem;
 
 
   always_ff @(negedge clk) begin
@@ -368,11 +353,7 @@ module top
       update_o  <= 1;
       r_wd3     <= prf_alu.value;
       commit_rd <= prf_alu.rd;
-      for (int i = 0; i < 31; i++) begin
-        ROB[i] <= ROB[i+1];
-      end
-      rob_stack_count <= rob_stack_count - 1;
-      ROB[31] <= '0;
+      
     end else if ((prf_mem.pc == ROB[0].pc) && ROB[0].valid) begin
       pc_o      <= prf_mem.pc;
       instr_o   <= prf_mem.instr;
@@ -381,11 +362,6 @@ module top
       update_o  <= 1;
       r_wd3     <= prf_mem.value;
       commit_rd <= prf_mem.rd;
-      for (int i = 0; i < 31; i++) begin
-        ROB[i] <= ROB[i+1];
-      end
-      rob_stack_count <= rob_stack_count - 1;
-      ROB[31] <= '0;
     end else begin
       update_o  <= 0;
       r_wd3     <= 0;
@@ -394,15 +370,26 @@ module top
   end
 
   always_ff @(negedge clk) begin
+    if((ROB[0].valid) &&((prf_mem.pc == ROB[0].pc)||((prf_alu.pc == ROB[0].pc))) ) begin
+    for (int i = 0; i < 31; i++) begin
+        ROB[i] <= ROB[i+1];
+      end
+      rob_stack_count <= rob_stack_count - 1;
+      ROB[31] <= '0;
+    end
+  end
+
+  always_ff @(negedge clk) begin
     if (commit_rd == 0) register[0] <= 0;
-    else register[commit_rd] <= r_wd3;
+    else  begin 
+    register[commit_rd] <= r_wd3;
     register_busy[commit_rd] <= 1'b0;
+    end
   end
 
   // ====== Decode Functions =====================================================
 
   function automatic instruct_t decode_function(input logic [XLEN-1:0] instr);
-    decode_function.opname = opnames_t'(instr[16:0]);
     decode_function.op = instr[6:0];
     decode_function.rd = instr[11:7];
     decode_function.funct3 = instr[14:12];
