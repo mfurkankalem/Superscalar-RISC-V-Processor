@@ -1,6 +1,6 @@
 module tb ();
   logic [riscv_pkg::XLEN-1:0] addr;
-  logic [7:0]                 data [0:riscv_pkg::XLEN-1];  
+  logic [31:0]                 data [0:31];  
   logic [riscv_pkg::XLEN-1:0] pc;
   logic [riscv_pkg::XLEN-1:0] instr;
   logic [                4:0] reg_addr;
@@ -10,7 +10,6 @@ module tb ();
   logic                       update;
   logic                       clk;
   logic                       rstn;
-  logic                       test_i;
 
   top i_top (
       .clk(clk),
@@ -23,8 +22,7 @@ module tb ();
       .reg_addr_o(reg_addr),
       .reg_data_o(reg_data),
       .mem_addr_o(mem_addr),  
-      .mem_data_o(mem_data),
-      .test_i(test_i)
+      .mem_data_o(mem_data)
 
   );
   integer file_pointer;
@@ -52,16 +50,13 @@ module tb ();
 
   initial begin
     rstn = 0;
-    test_i = 0;
     #2;
     rstn = 1;
     #2
-    test_i = 1;
-    #10000;
+    #7000;
     for (int i = 0; i < riscv_pkg::XLEN/4; i++) begin
       addr = i*4;
-      $display("data @ mem[0x%8h] = %2h%2h%2h%2h", addr, data[addr],
-      data[addr+1], data[addr+2], data[addr+3]);
+      $display("data @ mem[0x%8h] = %8h", addr, data[addr]);
     end
     $finish;
   end

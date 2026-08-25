@@ -4,10 +4,11 @@ module data_memory (
     input logic clk, dm_cd,
     input logic [31:0] dm_a,
     input logic [31:0] dm_wd,
+    output logic [31:0] data [0:31],  
     output logic [31:0] dm_rd 
 );
 
-logic [31:0] data [0:31];                 
+               
 
 assign dm_rd = data[dm_a];
 
