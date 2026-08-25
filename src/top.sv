@@ -79,7 +79,7 @@ module top
 
   always_comb begin
     if (((!register_busy[decoded_d.rd]) && (!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2]))
-            || ((!register_busy[decoded_d.rs1]) && ((decoded_d.op == OP_ITYPE)||
+            || ((!register_busy[decoded_d.rd]) && (!register_busy[decoded_d.rs1]) && ((decoded_d.op == OP_ITYPE)||
                     (decoded_d.op == OP_LUI) || (decoded_d.op == OP_AUIPC) ||
                     (decoded_d.op == OP_JAL) || (decoded_d.op == OP_JALR) ))) begin
       en_f = 1;
