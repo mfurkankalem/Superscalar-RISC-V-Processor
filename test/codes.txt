@@ -1,21 +1,20 @@
-addi  x1, x0, 4
-addi  x2, x0, 55
-sw    x2, 0(x1)
-addi  x3, x0, -12
-sw    x3, 4(x1)
-lw    x4, 0(x1)
-lw    x5, 4(x1)
-addi  x6, x0, 5
-sb    x2, 0(x6)
-lw    x7, 0(x6)
-addi  x8, x0, -1
-sb    x8, 1(x6)
-lb    x9, 1(x6)
-lbu   x10, 1(x6)
-addi  x11, x0, 300
-sh    x5, 0(x11)
-lh    x12, 0(x11)
-lhu   x13, 0(x11)
-sw    x4, 8(x1)
-lw    x14, 8(x1)
-nop
+jal   x1, 12
+addi  x2, x0, 99
+addi  x2, x0, 99
+addi  x2, x0, 10
+addi  x3, x0, 10
+beq   x2, x3, 12
+addi  x4, x0, 111
+addi  x4, x0, 222
+addi  x4, x0, 5
+addi  x5, x0, 9
+beq   x4, x5, 12
+addi  x6, x0, 77
+jalr  x7, 56(x1)
+addi  x8, x0, 199
+addi  x8, x0, 299
+addi  x8, x0, 3
+addi  x9, x0, 3
+beq   x8, x9, 8
+addi  x10, x0, 555
+jal   x0, 0

@@ -214,10 +214,14 @@ module top
   always_ff @(posedge clk) begin
     if (pc_redirect) begin
       prf_alu.value <= pc_alu + 4;
+      prf_alu.rd <= instr_alu.rd;
+    end else if (instr_alu.op == OP_BTYPE) begin
+      prf_alu.value <= 0;
+      prf_alu.rd <= 0;
     end else begin
       prf_alu.value <= alu_out;
+      prf_alu.rd <= instr_alu.rd;
     end
-    prf_alu.rd <= instr_alu.rd;
     prf_alu.pc <= pc_alu;
     prf_alu.instr <= {instr_alu.imm, instr_alu.op};
   end
@@ -236,12 +240,10 @@ module top
   always_comb begin
     if (cache_busy[decoded_d.rd]) begin
       en_m = 0;
-      en_d = 0;
-      en_f = 0;
+
     end else begin
       en_m = 1;
-      en_d = 1;
-      en_f = 1;
+
     end
   end
   always_ff @(posedge clk) begin
@@ -325,7 +327,7 @@ module top
   end
 
   always_ff @(posedge clk) begin
-    prf_mem.value <= mem_out;  //değişicek
+    prf_mem.value <= mem_out;
     prf_mem.rd <= instr_mem_read.rd;
     prf_mem.pc <= pc_mem_read;
     prf_mem.instr <= {instr_mem.imm, instr_mem.op};
@@ -374,6 +376,7 @@ module top
   always_ff @(negedge clk) begin
     if (commit_rd == 0) begin
       register[0] <= 0;
+      register_busy[commit_rd] <= 1'b0;
     end else begin
       register[commit_rd] <= r_wd3;
       register_busy[commit_rd] <= 1'b0;
@@ -384,7 +387,8 @@ module top
 
   function automatic instruct_t decode_function(input logic [XLEN-1:0] instr);
     decode_function.op = instr[6:0];
-    decode_function.rd = instr[11:7];
+    if ((decode_function.op == OP_BTYPE) | (decode_function.op == OP_STYPE)) decode_function.rd = 0;
+    else decode_function.rd = instr[11:7];
     decode_function.funct3 = instr[14:12];
     decode_function.rs1 = instr[19:15];
     decode_function.rs2 = instr[24:20];
@@ -502,7 +506,7 @@ module top
 
 
   assign mem_addr_o = 0;
-  assign data_o[0] = 0;
+  assign data_o[0]  = 0;
   assign mem_data_o = 0;
 endmodule
 
