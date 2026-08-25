@@ -19,13 +19,13 @@ package riscv_pkg;
   } rob_t;
 
   typedef struct packed {
-    logic [6:0]  op;
-    logic [4:0]  rd;
-    logic [2:0]  funct3;
-    logic [4:0]  rs1;
-    logic [4:0]  rs2;
+    logic        issue;
     logic [6:0]  funct7;
-    logic [24:0] imm;
+    logic [4:0]  rs2;
+    logic [4:0]  rs1;
+    logic [2:0]  funct3;
+    logic [4:0]  rd;
+    logic [6:0]  op; 
   } instruct_t;
 
   typedef struct packed {

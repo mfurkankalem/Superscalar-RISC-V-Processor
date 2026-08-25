@@ -75,7 +75,7 @@ module top
   issue_t decode_result;
 
   assign decoded_d = decode_function(instr_d);
-  assign imm_d = immediate_function(decoded_d.op, decoded_d.imm);
+  assign imm_d = immediate_function(instr_d);
 
   always_comb begin
     if (((!register_busy[decoded_d.rd]) && (!register_busy[decoded_d.rs1]) && (!register_busy[decoded_d.rs2]))
@@ -223,7 +223,9 @@ module top
       prf_alu.rd <= instr_alu.rd;
     end
     prf_alu.pc <= pc_alu;
-    prf_alu.instr <= {instr_alu.imm, instr_alu.op};
+    prf_alu.instr <= {
+      instr_alu.funct7, instr_alu.rs2, instr_alu.rs1, instr_alu.funct3, instr_alu.rd, instr_alu.op
+    };
   end
 
   // ====== MEM Issue Stage ======================================================
@@ -330,7 +332,9 @@ module top
     prf_mem.value <= mem_out;
     prf_mem.rd <= instr_mem_read.rd;
     prf_mem.pc <= pc_mem_read;
-    prf_mem.instr <= {instr_mem.imm, instr_mem.op};
+    prf_mem.instr <= {
+      instr_mem.funct7, instr_mem.rs2, instr_mem.rs1, instr_mem.funct3, instr_mem.rd, instr_mem.op
+    };
     cache_busy[data_word_address] <= 1'b0;
   end
 
@@ -393,21 +397,21 @@ module top
     decode_function.rs1 = instr[19:15];
     decode_function.rs2 = instr[24:20];
     decode_function.funct7 = instr[31:25];
-    decode_function.imm = instr[31:7];
   endfunction
 
-  function automatic logic [XLEN-1:0] immediate_function(input logic [6:0] op,
-                                                         input logic [24:0] imm);
+  function automatic logic [XLEN-1:0] immediate_function(input logic [31:0] inst);
+    logic [6:0] op;
+    op = inst[6:0];
+
     case (op)
-      OP_ITYPE: immediate_function = {{20{imm[24]}}, imm[24:13]};
-      OP_LTYPE: immediate_function = {{20{imm[24]}}, imm[24:13]};
-      OP_STYPE: immediate_function = {{20{imm[24]}}, imm[24:18], imm[4:0]};
-      OP_BTYPE: immediate_function = {{19{imm[24]}}, imm[24], imm[0], imm[23:18], imm[4:1], 1'b0};
-      OP_LUI:   immediate_function = {imm[24:5], 12'b0};
-      OP_AUIPC: immediate_function = {imm[24:5], 12'b0};
-      OP_JAL:   immediate_function = {{11{imm[24]}}, imm[24], imm[12:5], imm[13], imm[23:14], 1'b0};
-      OP_JALR:  immediate_function = {{20{imm[24]}}, imm[24:13]};
-      default:  immediate_function = '0;
+      OP_ITYPE, OP_LTYPE, OP_JALR: immediate_function = {{20{inst[31]}}, inst[31:20]};
+      OP_STYPE: immediate_function = {{20{inst[31]}}, inst[31:25], inst[11:7]};
+      OP_BTYPE:
+      immediate_function = {{19{inst[31]}}, inst[31], inst[7], inst[30:25], inst[11:8], 1'b0};
+      OP_LUI, OP_AUIPC: immediate_function = {inst[31:12], 12'b0};
+      OP_JAL:
+      immediate_function = {{11{inst[31]}}, inst[31], inst[19:12], inst[20], inst[30:21], 1'b0};
+      default: immediate_function = '0;
     endcase
   endfunction
 
