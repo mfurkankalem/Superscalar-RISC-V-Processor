@@ -1,7 +1,7 @@
 package riscv_pkg;
 
   localparam INST_START = 32'h80000000;
-  localparam XLEN        = 32'd32;
+  localparam XLEN       = 32'd32;
 
   //====================================================================
   // Core structs
