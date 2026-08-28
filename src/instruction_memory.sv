@@ -2,7 +2,8 @@ module instruction_memory import riscv_pkg::*; #(
     parameter string InitFile = "test/test.hex"
 ) (
     input  logic [XLEN-1:0] im_a,
-    output logic [XLEN-1:0] im_rd
+    output logic [XLEN-1:0] im_rd,
+    output logic [XLEN-1:0] im_rd2
 );
 
     logic [XLEN-1:0] memory [logic [XLEN-1:0]];
@@ -32,5 +33,6 @@ module instruction_memory import riscv_pkg::*; #(
     end
 
     assign im_rd = memory.exists(im_a) ? memory[im_a] : '0;
+    assign im_rd2 = memory.exists(im_a+4) ? memory[im_a+4] : '0;
 
 endmodule

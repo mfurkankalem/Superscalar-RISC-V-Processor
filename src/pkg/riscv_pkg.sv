@@ -1,7 +1,7 @@
 package riscv_pkg;
 
   localparam INST_START = 32'h80000000;
-  localparam XLEN       = 32'd32;
+  localparam XLEN = 32'd32;
 
   //====================================================================
   // Core structs
@@ -13,40 +13,53 @@ package riscv_pkg;
     logic [XLEN-1:0] instr;
   } prf_t;
 
-  typedef struct packed {
-    logic            valid;
-    logic [XLEN-1:0] pc;
-  } rob_t;
-
-  typedef struct packed {
-    logic        issue;
-    logic [6:0]  funct7;
-    logic [4:0]  rs2;
-    logic [4:0]  rs1;
-    logic [2:0]  funct3;
-    logic [4:0]  rd;
-    logic [6:0]  op; 
-  } instruct_t;
-
-  typedef struct packed {
-    logic ALU;
-    logic MEM;
+  typedef enum logic [1:0] {
+    ALU = 2'b00,
+    MEM = 2'b01
   } issue_t;
+
+  typedef struct packed {
+    issue_t          issue;
+    logic [3:0]      valid;
+    logic [XLEN-1:0] pc;
+    logic [XLEN-1:0] instr;
+  } rob_t;
 
   //====================================================================
   // Opcodes
   //====================================================================
   typedef enum logic [6:0] {
-    OP_RTYPE = 7'b0110011,
-    OP_ITYPE = 7'b0010011,
-    OP_BTYPE = 7'b1100011,
-    OP_LUI   = 7'b0110111,
+    OP_REGISTER = 7'b0110011,
+    OP_IMMEDIATE = 7'b0010011,
+    OP_BRANCH = 7'b1100011,
+    OP_LUI = 7'b0110111,
     OP_AUIPC = 7'b0010111,
-    OP_JAL   = 7'b1101111,
-    OP_JALR  = 7'b1100111,
-    OP_STYPE = 7'b0100011,
-    OP_LTYPE = 7'b0000011
+    OP_JAL = 7'b1101111,
+    OP_JALR = 7'b1100111,
+    OP_STORE = 7'b0100011,
+    OP_LOAD = 7'b0000011
   } opcode_e;
+
+  typedef enum logic [2:0] {
+    OP_RTYPE,
+    OP_ITYPE,
+    OP_STYPE,
+    OP_BTYPE,
+    OP_UTYPE,
+    OP_JTYPE,
+    INVALID_TYPE
+  } optype_e;
+
+  typedef struct packed {
+    optype_e optype;
+    logic [XLEN-1:0] imm;
+    logic [6:0] funct7;
+    logic [4:0] rs2;
+    logic [4:0] rs1;
+    logic [2:0] funct3;
+    logic [4:0] rd;
+    opcode_e op;
+  } instruct_t;
 
   //====================================================================
   // funct3 groups
@@ -88,16 +101,16 @@ package riscv_pkg;
   //====================================================================
   // funct7 values
   //====================================================================
-  localparam F7_ADD  = 7'b0000000;
-  localparam F7_SUB  = 7'b0100000;
-  localparam F7_SLL  = 7'b0000000;
-  localparam F7_SLT  = 7'b0000000;
+  localparam F7_ADD = 7'b0000000;
+  localparam F7_SUB = 7'b0100000;
+  localparam F7_SLL = 7'b0000000;
+  localparam F7_SLT = 7'b0000000;
   localparam F7_SLTU = 7'b0000000;
-  localparam F7_XOR  = 7'b0000000;
-  localparam F7_SRL  = 7'b0000000;
-  localparam F7_SRA  = 7'b0100000;
-  localparam F7_OR   = 7'b0000000;
-  localparam F7_AND  = 7'b0000000;
+  localparam F7_XOR = 7'b0000000;
+  localparam F7_SRL = 7'b0000000;
+  localparam F7_SRA = 7'b0100000;
+  localparam F7_OR = 7'b0000000;
+  localparam F7_AND = 7'b0000000;
 
   localparam F7_SLLI = 7'b0000000;
   localparam F7_SRLI = 7'b0000000;
