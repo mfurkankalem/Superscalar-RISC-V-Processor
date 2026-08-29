@@ -170,7 +170,7 @@ module top
             instr_mem <= 0;
             imm_mem <= 0;
             iq_stack_count <= iq_stack_count - 1;
-            for (int i = 0; i < 31; i++) begin
+            for (int i = alu_number; i < 31-alu_number; i++) begin
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
@@ -188,7 +188,7 @@ module top
             instr_mem <= IQ[mem_number].instr;
             imm_mem <= IQ[mem_number].instr.imm;
             iq_stack_count <= iq_stack_count - 1;
-            for (int i = 0; i < 31; i++) begin
+            for (int i = mem_number; i < 31-mem_number; i++) begin
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
@@ -425,7 +425,7 @@ module top
                     rob_stack_count <= rob_stack_count - 1;
                     ROB[31] <= '0;
                     for (int i3 = i; i3 < 31-i; i3++) begin
-                        PRF[i3+i] <= PRF[i3+i+1];
+                        PRF[i3] <= PRF[i3+1];
                     end
                     prf_stack_count <= prf_stack_count - 1;
                     PRF[31] <= '0;
