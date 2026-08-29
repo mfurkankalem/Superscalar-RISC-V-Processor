@@ -1,13 +1,12 @@
-#include "commands.h"
 .section .text
 .globl _start
 _start:
     addi x3, x0, 3
+    sw x7, 0(x0)
     addi x2, x0, 1
+    sw x7, 0(x0)
     addi x1, x0, -2
     addi x4, x0, 3
     add x5, x3, x0
     add x6, x2, x0
-    veya x5, x4, x3 
-    ekle x7, x6, x3
     

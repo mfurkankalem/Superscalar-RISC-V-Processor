@@ -14,8 +14,9 @@ package riscv_pkg;
   } prf_t;
 
   typedef enum logic [1:0] {
-    ALU = 2'b00,
-    MEM = 2'b01
+    ALU = 2'b01,
+    MEM = 2'b10,
+    INV = 2'b11
   } issue_t;
 
   typedef struct packed {
@@ -24,16 +25,7 @@ package riscv_pkg;
     logic [XLEN-1:0] instr;
   } rob_t;
 
-  typedef struct packed {
 
-    issue_t          issue;
-    logic [4:0]      rs2;
-    logic            rs2_ready;
-    logic [4:0]      rs1;
-    logic            rs1_ready;
-    logic [4:0]      rd;
-    logic [XLEN-1:0] instr;
-  } iq_t;
   //====================================================================
   // Opcodes
   //====================================================================
@@ -45,18 +37,18 @@ package riscv_pkg;
     OP_AUIPC = 7'b0010111,
     OP_JAL = 7'b1101111,
     OP_JALR = 7'b1100111,
-    OP_STORE = 7'b0100011,
+    OP_STORE = 7'b0100011, 
     OP_LOAD = 7'b0000011
   } opcode_e;
 
   typedef enum logic [2:0] {
-    OP_RTYPE,
-    OP_ITYPE,
-    OP_STYPE,
-    OP_BTYPE,
-    OP_UTYPE,
-    OP_JTYPE,
-    INVALID_TYPE
+    OP_RTYPE = 3'b000,
+    OP_ITYPE = 3'b001,
+    OP_STYPE = 3'b010,
+    OP_BTYPE = 3'b011,
+    OP_UTYPE = 3'b100,
+    OP_JTYPE = 3'b101,
+    INVALID_TYPE  = 3'b111
   } optype_e;
 
   typedef struct packed {
@@ -70,6 +62,16 @@ package riscv_pkg;
     logic [4:0] rd;
     opcode_e op;
   } instruct_t;
+
+  typedef struct packed {
+
+    issue_t          issue;
+    logic [4:0]      rs2;
+    logic [4:0]      rs1;
+    logic [4:0]      rd;
+    instruct_t       instr;
+    logic [XLEN-1:0] pc;
+  } iq_t;
 
   //====================================================================
   // funct3 groups
