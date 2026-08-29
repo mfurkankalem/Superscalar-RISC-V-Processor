@@ -445,12 +445,13 @@ module top
                     prf_stack_count <= prf_stack_count - 1;
                     PRF[31] <= '0;
 
-                end else begin
-                    update_o <= 0;
-                    r_wd3 <= 0;
-                    commit_rd <= 0;
-                end
+                end 
             end
+        end
+        else begin
+            update_o <= 0;
+            r_wd3 <= 0;
+            commit_rd <= 0;
         end
     end
     always_ff @(negedge clk) begin
