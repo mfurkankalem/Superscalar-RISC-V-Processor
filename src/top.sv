@@ -155,6 +155,8 @@ module top
             end
             IQ[30] <= '0;
             IQ[31] <= '0;
+            register_busy[IQ[alu_number].rd] <= 1'b1;
+            register_busy[IQ[mem_number].rd] <= 1'b1;
         end
         else if (alu_done && !mem_done) begin
             ALUr_rd1 <= register[IQ[alu_number].rs1];
@@ -172,6 +174,7 @@ module top
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
+            register_busy[IQ[alu_number].rd] <= 1'b1;
         end
         else if (!alu_done && mem_done) begin
             ALUr_rd1 <= 0;
@@ -189,6 +192,7 @@ module top
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
+            register_busy[IQ[mem_number].rd] <= 1'b1;
         end
         else begin
             ALUr_rd1 <= 0;
@@ -275,9 +279,7 @@ module top
             prf_alu.rd <= instr_alu.rd;
         end
         prf_alu.pc <= pc_alu;
-        prf_alu.instr <= {
-            instr_alu.funct7, instr_alu.rs2, instr_alu.rs1, instr_alu.funct3, instr_alu.rd, instr_alu.op
-        };
+    
     end
 
     // ====== MEM Issue Stage ======================================================
@@ -382,9 +384,6 @@ module top
         prf_mem.value <= mem_out;
         prf_mem.rd <= instr_mem_read.rd;
         prf_mem.pc <= pc_mem_read;
-        prf_mem.instr <= {
-            instr_mem.funct7, instr_mem.rs2, instr_mem.rs1, instr_mem.funct3, instr_mem.rd, instr_mem.op
-        };
         cache_busy[data_word_address] <= 1'b0;
     end
 
@@ -392,42 +391,53 @@ module top
     logic [XLEN-1:0] r_wd3;
     logic [4:0] commit_rd;
     prf_t prf_alu, prf_mem;
+    prf_t PRF [0:XLEN-1];
+    logic [4:0] prf_stack_count;
 
     always_ff @(negedge clk) begin
-        if ((prf_alu.pc == ROB[0].pc) && (ROB[0].valid == 1)) begin
-            pc_o <= prf_alu.pc;
-            instr_o <= prf_alu.instr;
-            reg_data_o <= prf_alu.value;
-            reg_addr_o <= prf_alu.rd;
-            update_o <= 1;
-            r_wd3 <= prf_alu.value;
-            commit_rd <= prf_alu.rd;
-        end else if ((prf_mem.pc == ROB[0].pc) && (ROB[0].valid == 1)) begin
-            pc_o <= prf_mem.pc;
-            instr_o <= prf_mem.instr;
-            reg_data_o <= prf_mem.value;
-            reg_addr_o <= prf_mem.rd;
-            update_o <= 1;
-            r_wd3 <= prf_mem.value;
-            commit_rd <= prf_mem.rd;
-        end else begin
-            update_o <= 0;
-            r_wd3 <= 0;
-            commit_rd <= 0;
+      if ((prf_alu.pc != 0) && (prf_mem.pc != 0)) begin
+        PRF[prf_stack_count] <= prf_alu;
+        PRF[prf_stack_count+1] <= prf_mem;
+        prf_stack_count <= prf_stack_count + 2;
+      end else if (prf_alu.pc != 0) begin
+        PRF[prf_stack_count] <= prf_alu;
+        prf_stack_count <= prf_stack_count + 1;
+      end else if (prf_mem.pc != 0) begin
+        PRF[prf_stack_count] <= prf_mem;
+        prf_stack_count <= prf_stack_count + 1;
+      end
+    end
+
+    always_ff @(posedge clk) begin
+        if (prf_stack_count > 0) begin
+            for (int i = 0; i < prf_stack_count; i++) begin
+                if ((PRF[i].pc == ROB[0].pc) && (ROB[i].valid == 1)) begin
+                    pc_o <= PRF[i].pc;
+                    instr_o <= ROB[0].instr;
+                    reg_data_o <= PRF[i].value;
+                    reg_addr_o <= PRF[i].rd;
+                    update_o <= 1;
+                    r_wd3 <= PRF[i].value;
+                    commit_rd <= PRF[i].rd;
+                    for (int i2 = 0; i2 < 31; i2++) begin
+                    ROB[i2] <= ROB[i2+1];
+                    end
+                    rob_stack_count <= rob_stack_count - 1;
+                    ROB[31] <= '0;
+                    for (int i3 = i; i3 < 31-i; i3++) begin
+                        PRF[i3+i] <= PRF[i3+i+1];
+                    end
+                    prf_stack_count <= prf_stack_count - 1;
+                    PRF[31] <= '0;
+
+                end else begin
+                    update_o <= 0;
+                    r_wd3 <= 0;
+                    commit_rd <= 0;
+                end
+            end
         end
     end
-
-    /*
-    always_ff @(negedge clk) begin
-    if ((ROB[0].valid==1) && ((prf_mem.pc == ROB[0].pc) || ((prf_alu.pc == ROB[0].pc)))) begin
-    for (int i = 0; i < 31; i++) begin
-    ROB[i] <= ROB[i+1];
-    end
-    rob_stack_count <= rob_stack_count - 1;
-    ROB[31] <= '0;
-    end
-    end*/
-
     always_ff @(negedge clk) begin
         if (commit_rd == 0) begin
             register[0] <= 0;

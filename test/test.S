@@ -1,8 +1,8 @@
 .section .text
 .globl _start
 _start:
+    addi x7, x0, 5
     addi x3, x0, 3
-    sw x7, 0(x0)
     addi x2, x0, 1
     sw x7, 0(x0)
     addi x1, x0, -2

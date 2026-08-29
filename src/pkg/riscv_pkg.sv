@@ -10,7 +10,6 @@ package riscv_pkg;
     logic [4:0]      rd;
     logic [XLEN-1:0] pc;
     logic [XLEN-1:0] value;
-    logic [XLEN-1:0] instr;
   } prf_t;
 
   typedef enum logic [1:0] {
