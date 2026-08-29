@@ -19,12 +19,21 @@ package riscv_pkg;
   } issue_t;
 
   typedef struct packed {
-    issue_t          issue;
-    logic [3:0]      valid;
+    logic            valid;
     logic [XLEN-1:0] pc;
     logic [XLEN-1:0] instr;
   } rob_t;
 
+  typedef struct packed {
+
+    issue_t          issue;
+    logic [4:0]      rs2;
+    logic            rs2_ready;
+    logic [4:0]      rs1;
+    logic            rs1_ready;
+    logic [4:0]      rd;
+    logic [XLEN-1:0] instr;
+  } iq_t;
   //====================================================================
   // Opcodes
   //====================================================================
@@ -51,6 +60,7 @@ package riscv_pkg;
   } optype_e;
 
   typedef struct packed {
+    issue_t          issue;
     optype_e optype;
     logic [XLEN-1:0] imm;
     logic [6:0] funct7;

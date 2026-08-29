@@ -30,8 +30,8 @@ module top
   logic [XLEN-1:0] instruction_cache[0:31];  // 32 instruction cache
 
   instruction_memory instruction_memory_0 (
-      .im_a (pc_f),
-      .im_rd(im_rd),
+      .im_a  (pc_f),
+      .im_rd (im_rd),
       .im_rd2(im_rd2)
   );  // read memory
 
@@ -75,18 +75,21 @@ module top
   end
 
   // ====== Decode Stage =========================================================
-  logic [XLEN-1:0] pc_d1, pc_d2, instr_d1, instr_d2, imm_d1, imm_d2,
-   ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
+  logic [XLEN-1:0]
+      pc_d1, pc_d2, instr_d1, instr_d2, imm_d1, imm_d2, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
   logic [XLEN-1:0] register[0:XLEN-1];  //register file
   logic [XLEN-1:0] register_busy, cache_busy;
-  rob_t ROB[0:XLEN-1];
+  rob_t ROB [0:XLEN-1];
+  iq_t IQ [0:XLEN-1];
   logic [4:0] rob_stack_count;
   instruct_t decoded_d1, decoded_d2;
 
-  assign decoded_d1 = decode_function(instr_d1);
-  assign decoded_d2 = decode_function(instr_d2);
 
-  always_comb begin
+  assign decoded_d1 = decode_code(instr_d1);
+  assign decoded_d2 = decode_code(instr_d2);
+
+  /*
+  always_ff @(negedge clk) begin
     if (((!register_busy[decoded_d1.rd]) && (!register_busy[decoded_d1.rs1]) && (!register_busy[decoded_d1.rs2]))
             || ((!register_busy[decoded_d1.rd]) && (!register_busy[decoded_d1.rs1]) && ((decoded_d1.optype == OP_ITYPE)||
                     (decoded_d1.optype == OP_UTYPE) ||
@@ -97,34 +100,24 @@ module top
       en_f = 0;
       en_d = 0;
     end
-  end
+  end*/
 
   always_ff @(negedge clk) begin
-    if (pc_d1>= INST_START) begin
-    ROB[rob_stack_count].pc <= pc_d1;
-    ROB[rob_stack_count].valid <= 1;
-    ROB[rob_stack_count].instr <= instr_d1;
-    if (decoded_d1.op == OP_LOAD || decoded_d1.op == OP_STORE) begin
-      ROB[rob_stack_count].issue <= MEM;
-    end else begin
-      ROB[rob_stack_count].issue <= ALU;
-    end
-    ROB[rob_stack_count+1].pc <= pc_d2;
-    ROB[rob_stack_count+1].valid <= 1;
-    ROB[rob_stack_count+1].instr <= instr_d2;
-    if (decoded_d2.op == OP_LOAD || decoded_d2.op == OP_STORE) begin
-      ROB[rob_stack_count+1].issue <= MEM;
-    end else begin
-      ROB[rob_stack_count+1].issue <= ALU;
-    end
-    rob_stack_count <= rob_stack_count + 2;
+    if (pc_d1 >= INST_START) begin
+      ROB[rob_stack_count].pc <= pc_d1;
+      ROB[rob_stack_count].valid <= 1;
+      ROB[rob_stack_count].instr <= instr_d1;
+      ROB[rob_stack_count+1].pc <= pc_d2;
+      ROB[rob_stack_count+1].valid <= 1;
+      ROB[rob_stack_count+1].instr <= instr_d2;
+      rob_stack_count <= rob_stack_count + 2;
     end
   end
 
 
   always_ff @(posedge clk) begin
     if (en_d) begin
-        begin
+      begin
         ALUr_rd1 <= 0;
         ALUr_rd2 <= 0;
         pc_alu <= 0;
@@ -331,7 +324,7 @@ module top
   prf_t prf_alu, prf_mem;
 
   always_ff @(negedge clk) begin
-    if ((prf_alu.pc == ROB[0].pc) && (ROB[0].valid==1)) begin
+    if ((prf_alu.pc == ROB[0].pc) && (ROB[0].valid == 1)) begin
       pc_o <= prf_alu.pc;
       instr_o <= prf_alu.instr;
       reg_data_o <= prf_alu.value;
@@ -339,7 +332,7 @@ module top
       update_o <= 1;
       r_wd3 <= prf_alu.value;
       commit_rd <= prf_alu.rd;
-    end else if ((prf_mem.pc == ROB[0].pc) && (ROB[0].valid==1)) begin
+    end else if ((prf_mem.pc == ROB[0].pc) && (ROB[0].valid == 1)) begin
       pc_o <= prf_mem.pc;
       instr_o <= prf_mem.instr;
       reg_data_o <= prf_mem.value;
@@ -354,7 +347,7 @@ module top
     end
   end
 
-/*
+  /*
   always_ff @(negedge clk) begin
     if ((ROB[0].valid==1) && ((prf_mem.pc == ROB[0].pc) || ((prf_alu.pc == ROB[0].pc)))) begin
       for (int i = 0; i < 31; i++) begin
@@ -377,57 +370,71 @@ module top
 
   // ====== Decode Functions =====================================================
 
-  function automatic instruct_t decode_function(input logic [XLEN-1:0] instr);
+  function automatic instruct_t decode_code(input logic [XLEN-1:0] instr);
+    instruct_t decode_function;
     decode_function.op = opcode_e'(instr[6:0]);
     decode_function.optype = opcode_to_optype(decode_function.op);
-    casez(decode_function.optype)
+    casez (decode_function.optype)
       OP_RTYPE: begin
         decode_function.funct7 = instr[31:25];
         decode_function.rs2 = instr[24:20];
         decode_function.rs1 = instr[19:15];
         decode_function.funct3 = instr[14:12];
         decode_function.rd = instr[11:7];
+        decode_function.issue <= ALU;
       end
       OP_ITYPE: begin
         decode_function.imm = {{20{instr[31]}}, instr[31:20]};
         decode_function.rs1 = instr[19:15];
         decode_function.funct3 = instr[14:12];
         decode_function.rd = instr[11:7];
+        if(decode_function.op == OP_LOAD) begin
+          decode_function.issue <= MEM;
+        end else begin
+          decode_function.issue <= ALU;
+        end
       end
       OP_STYPE: begin
         decode_function.imm = {{20{instr[31]}}, instr[31:25], instr[11:7]};
         decode_function.rs2 = instr[24:20];
         decode_function.rs1 = instr[19:15];
         decode_function.funct3 = instr[14:12];
+        decode_function.issue <= MEM;
       end
       OP_BTYPE: begin
-        decode_function.imm =
-            {{19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
+        decode_function.imm = {
+          {19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0
+        };
         decode_function.rs2 = instr[24:20];
         decode_function.rs1 = instr[19:15];
         decode_function.funct3 = instr[14:12];
+        decode_function.issue <= ALU;
       end
       OP_UTYPE: begin
         decode_function.imm = {instr[31:12], 12'b0};
-        decode_function.rd = instr[11:7];
+        decode_function.rd  = instr[11:7];
+        decode_function.issue <= ALU;
       end
       OP_JTYPE: begin
-        decode_function.imm =
-            {{11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
+        decode_function.imm = {
+          {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0
+        };
         decode_function.rd = instr[11:7];
+        decode_function.issue <= ALU;
       end
-      endcase
+    endcase
+    return decode_function;
   endfunction
 
   function automatic optype_e opcode_to_optype(opcode_e op);
     case (op)
-      OP_REGISTER:                 return OP_RTYPE;
+      OP_REGISTER: return OP_RTYPE;
       OP_IMMEDIATE, OP_JALR, OP_LOAD: return OP_ITYPE;
-      OP_STORE:               return OP_STYPE;
-      OP_BRANCH:               return OP_BTYPE;
-      OP_LUI, OP_AUIPC:       return OP_UTYPE;
-      OP_JAL:                 return OP_JTYPE;
-      default:                return INVALID_TYPE; // illegal opcode, decode edilmemesi lazım
+      OP_STORE: return OP_STYPE;
+      OP_BRANCH: return OP_BTYPE;
+      OP_LUI, OP_AUIPC: return OP_UTYPE;
+      OP_JAL: return OP_JTYPE;
+      default: return INVALID_TYPE; 
     endcase
   endfunction
 
@@ -486,7 +493,7 @@ module top
           end
         endcase
       end
-      OP_LOAD: alu_op_e = ALU_ADD;
+      OP_LOAD:  alu_op_e = ALU_ADD;
       OP_STORE: alu_op_e = ALU_ADD;
       OP_BRANCH: begin
         case (funct3)
