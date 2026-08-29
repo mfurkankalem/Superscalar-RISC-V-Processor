@@ -86,7 +86,7 @@ module top
     assign decoded_d2 = decode_code(instr_d2);
 
     always_ff @(negedge clk) begin
-        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)|(instr_d2 != 0))) begin
+        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)&&(instr_d2 != 0))) begin
             IQ[iq_stack_count].issue <= decoded_d1.issue;
             IQ[iq_stack_count].rs1 <= decoded_d1.rs1;
             IQ[iq_stack_count].rs2 <= decoded_d1.rs2;
@@ -101,10 +101,19 @@ module top
             IQ[iq_stack_count+1].pc <= pc_d2;
             iq_stack_count <= iq_stack_count + 2;
         end
+        else if ((pc_d1 >= INST_START)&& (instr_d1 != 0)) begin
+            IQ[iq_stack_count].issue <= decoded_d1.issue;
+            IQ[iq_stack_count].rs1 <= decoded_d1.rs1;
+            IQ[iq_stack_count].rs2 <= decoded_d1.rs2;
+            IQ[iq_stack_count].rd <= decoded_d1.rd;
+            IQ[iq_stack_count].instr <= decoded_d1;
+            IQ[iq_stack_count].pc <= pc_d1;
+            iq_stack_count <= iq_stack_count + 1;
+        end
     end
 
     always_ff @(negedge clk) begin
-        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)|(instr_d2 != 0))) begin
+        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)&&(instr_d2 != 0))) begin
             ROB[rob_stack_count].pc <= pc_d1;
             ROB[rob_stack_count].valid <= 1;
             ROB[rob_stack_count].instr <= instr_d1;
@@ -112,6 +121,12 @@ module top
             ROB[rob_stack_count+1].valid <= 1;
             ROB[rob_stack_count+1].instr <= instr_d2;
             rob_stack_count <= rob_stack_count + 2;
+        end
+        else if ((pc_d1 >= INST_START)&& (instr_d1 != 0)) begin
+            ROB[rob_stack_count].pc <= pc_d1;
+            ROB[rob_stack_count].valid <= 1;
+            ROB[rob_stack_count].instr <= instr_d1;
+            rob_stack_count <= rob_stack_count + 1;
         end
     end
 
