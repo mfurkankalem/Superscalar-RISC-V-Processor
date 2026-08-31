@@ -26,19 +26,17 @@ module top
 
     // ====== Fetch Stage ==========================================================
     logic startvalue;
-    logic [XLEN-1:0] pc_f, im_rd, im_rd2;
+    logic [XLEN-1:0] pc_f, im_rd;
     logic [XLEN-1:0] instruction_cache[0:31]; // 32 instruction cache
 
     instruction_memory instruction_memory_0 (
         .im_a (pc_f),
-        .im_rd (im_rd),
-        .im_rd2(im_rd2)
+        .im_rd (im_rd)
     ); // read memory
 
     always_ff @(negedge clk) begin
         if (im_rd != instruction_cache[pc_f[6:2]]) begin
             instruction_cache[pc_f[6:2]] <= im_rd;
-            instruction_cache[(pc_f[6:2]+1)] <= im_rd2;
         end
     end
 
@@ -48,14 +46,12 @@ module top
                 if (startvalue) begin
                     if (pc_src > 0) begin
                         pc_f <= pc_src;
-                        pc_d1 <= 0;
-                        instr_d1 <= 0;
+                        pc_d <= 0;
+                        instr_d <= 0;
                     end else if (pc_f >= INST_START) begin
-                        pc_f <= pc_f + 8;
-                        pc_d1 <= pc_f;
-                        pc_d2 <= pc_f + 4;
-                        instr_d1 <= instruction_cache[pc_f[6:2]];
-                        instr_d2 <= instruction_cache[(pc_f[6:2]+1)];
+                        pc_f <= pc_f + 4;
+                        pc_d <= pc_f;
+                        instr_d <= instruction_cache[pc_f[6:2]];
                     end
                 end else begin
                     pc_f <= INST_START;
@@ -63,69 +59,42 @@ module top
                 end
             end else begin
                 pc_f <= pc_f;
-                pc_d1 <= pc_d1;
-                pc_d2 <= pc_d2;
-                instr_d1 <= instr_d1;
-                instr_d2 <= instr_d2;
+                pc_d <= pc_d;
+                instr_d <= instr_d;
             end
         end else pc_f <= 0;
     end
 
     // ====== Decode Stage =========================================================
     logic [XLEN-1:0]
-    pc_d1, pc_d2, instr_d1, instr_d2, imm_d1, imm_d2, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
+    pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
     logic [XLEN-1:0] register[0:XLEN-1]; //register file
     logic [XLEN-1:0] register_busy, cache_busy;
     rob_t ROB [0:XLEN-1];
     iq_t IQ [0:XLEN-1];
     logic [4:0] rob_stack_count;
     logic [4:0] iq_stack_count;
-    instruct_t decoded_d1, decoded_d2;
+    instruct_t decoded_d;
 
-    assign decoded_d1 = decode_code(instr_d1);
-    assign decoded_d2 = decode_code(instr_d2);
+    assign decoded_d = decode_code(instr_d);
 
     always_ff @(negedge clk) begin
-        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)&&(instr_d2 != 0))) begin
-            IQ[iq_stack_count].issue <= decoded_d1.issue;
-            IQ[iq_stack_count].rs1 <= decoded_d1.rs1;
-            IQ[iq_stack_count].rs2 <= decoded_d1.rs2;
-            IQ[iq_stack_count].rd <= decoded_d1.rd;
-            IQ[iq_stack_count].instr <= decoded_d1;
-            IQ[iq_stack_count].pc <= pc_d1;
-            IQ[iq_stack_count+1].issue <= decoded_d2.issue;
-            IQ[iq_stack_count+1].rs1 <= decoded_d2.rs1;
-            IQ[iq_stack_count+1].rs2 <= decoded_d2.rs2;
-            IQ[iq_stack_count+1].rd <= decoded_d2.rd;
-            IQ[iq_stack_count+1].instr <= decoded_d2;
-            IQ[iq_stack_count+1].pc <= pc_d2;
-            iq_stack_count <= iq_stack_count + 2;
-        end
-        else if ((pc_d1 >= INST_START)&& (instr_d1 != 0)) begin
-            IQ[iq_stack_count].issue <= decoded_d1.issue;
-            IQ[iq_stack_count].rs1 <= decoded_d1.rs1;
-            IQ[iq_stack_count].rs2 <= decoded_d1.rs2;
-            IQ[iq_stack_count].rd <= decoded_d1.rd;
-            IQ[iq_stack_count].instr <= decoded_d1;
-            IQ[iq_stack_count].pc <= pc_d1;
+        if ((pc_d >= INST_START)&& ((instr_d != 0))) begin
+            IQ[iq_stack_count].issue <= decoded_d.issue;
+            IQ[iq_stack_count].rs1 <= decoded_d.rs1;
+            IQ[iq_stack_count].rs2 <= decoded_d.rs2;
+            IQ[iq_stack_count].rd <= decoded_d.rd;
+            IQ[iq_stack_count].instr <= decoded_d;
+            IQ[iq_stack_count].pc <= pc_d;
             iq_stack_count <= iq_stack_count + 1;
         end
     end
 
     always_ff @(negedge clk) begin
-        if ((pc_d1 >= INST_START)&& ((instr_d1 != 0)&&(instr_d2 != 0))) begin
-            ROB[rob_stack_count].pc <= pc_d1;
+        if ((pc_d >= INST_START)&& ((instr_d != 0)&(instr_d != 0))) begin
+            ROB[rob_stack_count].pc <= pc_d;
             ROB[rob_stack_count].valid <= 1;
-            ROB[rob_stack_count].instr <= instr_d1;
-            ROB[rob_stack_count+1].pc <= pc_d2;
-            ROB[rob_stack_count+1].valid <= 1;
-            ROB[rob_stack_count+1].instr <= instr_d2;
-            rob_stack_count <= rob_stack_count + 2;
-        end
-        else if ((pc_d1 >= INST_START)&& (instr_d1 != 0)) begin
-            ROB[rob_stack_count].pc <= pc_d1;
-            ROB[rob_stack_count].valid <= 1;
-            ROB[rob_stack_count].instr <= instr_d1;
+            ROB[rob_stack_count].instr <= instr_d;
             rob_stack_count <= rob_stack_count + 1;
         end
     end
@@ -138,7 +107,7 @@ module top
         alu_number = '0;
         mem_done = 1'b0;
         mem_number = '0;
-        if (pc_d1 >= INST_START) begin
+        if (pc_d >= INST_START) begin
             for (int i = 0; i < 2; i++) begin
                 if (!alu_done && (IQ[i].issue == ALU) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2]) && (!register_busy[IQ[i].rd])) begin
                     alu_number = i;
