@@ -20,8 +20,8 @@ package riscv_pkg;
 
   typedef struct packed {
     logic            valid;
-    logic [XLEN-1:0] pc;
     logic [XLEN-1:0] instr;
+    logic [XLEN-1:0] pc;
   } rob_t;
 
 

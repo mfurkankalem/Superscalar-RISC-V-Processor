@@ -48,10 +48,14 @@ module top
                         pc_f <= pc_src;
                         pc_d <= 0;
                         instr_d <= 0;
-                    end else if (pc_f >= INST_START) begin
+                    end else if (pc_f >= INST_START && (rob_stack_count < 5'(XLEN - 5))) begin
                         pc_f <= pc_f + 4;
                         pc_d <= pc_f;
                         instr_d <= instruction_cache[pc_f[6:2]];
+                    end else begin
+                        pc_f <= pc_f;
+                        pc_d <= 0;
+                        instr_d <= 0;
                     end
                 end else begin
                     pc_f <= INST_START;
@@ -79,7 +83,7 @@ module top
     assign decoded_d = decode_code(instr_d);
 
     always_ff @(negedge clk) begin
-        if ((pc_d >= INST_START)&& ((instr_d != 0))) begin
+        if ((pc_d >= INST_START)&& ((instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
             IQ[iq_stack_count].issue <= decoded_d.issue;
             IQ[iq_stack_count].rs1 <= decoded_d.rs1;
             IQ[iq_stack_count].rs2 <= decoded_d.rs2;
@@ -91,7 +95,7 @@ module top
     end
 
     always_ff @(negedge clk) begin
-        if ((pc_d >= INST_START)&& ((instr_d != 0)&(instr_d != 0))) begin
+        if ((pc_d >= INST_START)&& ((instr_d != 0)&(instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
             ROB[rob_stack_count].pc <= pc_d;
             ROB[rob_stack_count].valid <= 1;
             ROB[rob_stack_count].instr <= instr_d;
@@ -108,41 +112,23 @@ module top
         mem_done = 1'b0;
         mem_number = '0;
         if (pc_d >= INST_START) begin
-            for (int i = 0; i < 2; i++) begin
-                if (!alu_done && (IQ[i].issue == ALU) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2]) && (!register_busy[IQ[i].rd])) begin
+            for (int i = 0; i < 10; i++) begin
+                if (!alu_done && (IQ[i].issue == ALU) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2])) begin
                     alu_number = i;
                     alu_done = 1;
+                    break;
                 end
-                if (!mem_done && (IQ[i].issue == MEM) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2]) && (!register_busy[IQ[i].rd])) begin
+                if (!mem_done && (IQ[i].issue == MEM) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2])) begin
                     mem_number = i;
                     mem_done = 1;
+                    break;
                 end
             end
         end
     end
 
     always_ff @(posedge clk) begin
-        if (alu_done && mem_done) begin
-            ALUr_rd1 <= register[IQ[alu_number].rs1];
-            ALUr_rd2 <= register[IQ[alu_number].rs2];
-            pc_alu <= IQ[alu_number].pc;
-            instr_alu <= IQ[alu_number].instr;
-            imm_alu <= IQ[alu_number].instr.imm;
-            MEMr_rd1 <= register[IQ[mem_number].rs1];
-            MEMr_rd2 <= register[IQ[mem_number].rs2];
-            pc_mem <= IQ[mem_number].pc;
-            instr_mem <= IQ[mem_number].instr;
-            imm_mem <= IQ[mem_number].instr.imm;
-            iq_stack_count <= iq_stack_count - 2;
-            for (int i = 0; i < 31; i++) begin
-                IQ[i] <= IQ[i+2];
-            end
-            IQ[30] <= '0;
-            IQ[31] <= '0;
-            register_busy[IQ[alu_number].rd] <= 1'b1;
-            register_busy[IQ[mem_number].rd] <= 1'b1;
-        end
-        else if (alu_done && !mem_done) begin
+        if (alu_done && !mem_done) begin
             ALUr_rd1 <= register[IQ[alu_number].rs1];
             ALUr_rd2 <= register[IQ[alu_number].rs2];
             pc_alu <= IQ[alu_number].pc;
