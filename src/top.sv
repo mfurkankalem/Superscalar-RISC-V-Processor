@@ -27,7 +27,7 @@ module top
     // ====== Fetch Stage ==========================================================
     logic startvalue;
     logic [XLEN-1:0] pc_f, im_rd;
-    logic [XLEN-1:0] instruction_cache[0:31]; // 32 instruction cache
+    logic [XLEN-1:0] instruction_cache[0:XLEN-1]; // 32 instruction cache
 
     instruction_memory instruction_memory_0 (
         .im_a (pc_f),
@@ -73,7 +73,10 @@ module top
     logic [XLEN-1:0]
     pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
     logic [XLEN-1:0] register[0:XLEN-1]; //register file
-    logic [XLEN-1:0] register_busy, cache_busy;
+    logic [XLEN-1:0] cache_busy;
+    logic [XLEN-1:0] prf_register [0:PRF_SIZE-1];
+    logic [6:0] rename_table [0:XLEN-1];
+    logic [PRF_SIZE-1:0] free_list;
     rob_t ROB [0:XLEN-1];
     iq_t IQ [0:XLEN-1];
     logic [4:0] rob_stack_count;
@@ -82,22 +85,31 @@ module top
 
     assign decoded_d = decode_code(instr_d);
 
+
+
+
+
     always_ff @(negedge clk) begin
         if ((pc_d >= INST_START)&& ((instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
             IQ[iq_stack_count].issue <= decoded_d.issue;
-            IQ[iq_stack_count].rs1 <= decoded_d.rs1;
-            IQ[iq_stack_count].rs2 <= decoded_d.rs2;
-            IQ[iq_stack_count].rd <= decoded_d.rd;
+            IQ[iq_stack_count].prf_rs1 <= rename_table[decoded_d.rs1];
+            IQ[iq_stack_count].prf_rs2 <= rename_table[decoded_d.rs2];
+            for (int i = 1; i < PRF_SIZE; i++) begin
+                if (free_list[i] == 1'b0) begin
+                    free_list[i] <= 1'b1;
+                    IQ[iq_stack_count].prf_rd <= 7'(i);
+                    rename_table[decoded_d.rd] <= 7'(i);
+                    ROB[rob_stack_count].prf_rd <= 7'(i);
+                    ROB[rob_stack_count].arf_rd <= decoded_d.rd;
+                    ROB[rob_stack_count].prev_prf_rd <= rename_table[decoded_d.rd];
+                    break;
+                end
+            end
             IQ[iq_stack_count].instr <= decoded_d;
             IQ[iq_stack_count].pc <= pc_d;
             iq_stack_count <= iq_stack_count + 1;
-        end
-    end
-
-    always_ff @(negedge clk) begin
-        if ((pc_d >= INST_START)&& ((instr_d != 0)&(instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
             ROB[rob_stack_count].pc <= pc_d;
-            ROB[rob_stack_count].valid <= 1;
+            ROB[rob_stack_count].state <= ROB_PENDING;
             ROB[rob_stack_count].instr <= instr_d;
             rob_stack_count <= rob_stack_count + 1;
         end
@@ -113,12 +125,12 @@ module top
         mem_number = '0;
         if (pc_d >= INST_START) begin
             for (int i = 0; i < 10; i++) begin
-                if (!alu_done && (IQ[i].issue == ALU) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2])) begin
+                if (!alu_done && (IQ[i].issue == ALU)) begin
                     alu_number = i;
                     alu_done = 1;
                     break;
                 end
-                if (!mem_done && (IQ[i].issue == MEM) && (!register_busy[IQ[i].rs1]) && (!register_busy[IQ[i].rs2])) begin
+                if (!mem_done && (IQ[i].issue == MEM)) begin
                     mem_number = i;
                     mem_done = 1;
                     break;
@@ -129,8 +141,9 @@ module top
 
     always_ff @(posedge clk) begin
         if (alu_done && !mem_done) begin
-            ALUr_rd1 <= register[IQ[alu_number].rs1];
-            ALUr_rd2 <= register[IQ[alu_number].rs2];
+            ALUr_rd1 <= prf_register[IQ[alu_number].prf_rs1];
+            ALUr_rd2 <= prf_register[IQ[alu_number].prf_rs2];
+            ALUr_rd <= IQ[alu_number].prf_rd;
             pc_alu <= IQ[alu_number].pc;
             instr_alu <= IQ[alu_number].instr;
             imm_alu <= IQ[alu_number].instr.imm;
@@ -144,7 +157,6 @@ module top
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
-            register_busy[IQ[alu_number].rd] <= 1'b1;
         end
         else if (!alu_done && mem_done) begin
             ALUr_rd1 <= 0;
@@ -152,8 +164,9 @@ module top
             pc_alu <= 0;
             instr_alu <= 0;
             imm_alu <= 0;
-            MEMr_rd1 <= register[IQ[mem_number].rs1];
-            MEMr_rd2 <= register[IQ[mem_number].rs2];
+            MEMr_rd1 <= prf_register[IQ[mem_number].prf_rs1];
+            MEMr_rd2 <= prf_register[IQ[mem_number].prf_rs2];
+            MEMr_rd <= IQ[mem_number].prf_rd;
             pc_mem <= IQ[mem_number].pc;
             instr_mem <= IQ[mem_number].instr;
             imm_mem <= IQ[mem_number].instr.imm;
@@ -162,7 +175,6 @@ module top
                 IQ[i] <= IQ[i+1];
             end
             IQ[31] <= '0;
-            register_busy[IQ[mem_number].rd] <= 1'b1;
         end
         else begin
             ALUr_rd1 <= 0;
@@ -180,6 +192,7 @@ module top
 
     // ====== ALU Issue Stage ======================================================
     logic [XLEN-1:0] pc_alu, imm_alu, alu_in1, alu_in2, alu_out, pc_src;
+    logic [6:0] ALUr_rd;
     logic pc_redirect;
     instruct_t instr_alu;
     alu_op_t alu_op;
@@ -239,21 +252,23 @@ module top
 
     always_ff @(posedge clk) begin
         if (pc_redirect) begin
-            prf_alu.value <= pc_alu + 4;
-            prf_alu.rd <= instr_alu.rd;
+            prf_register[ALUr_rd] <= pc_alu + 4;
         end else if (instr_alu.optype == OP_BTYPE) begin
-            prf_alu.value <= 0;
-            prf_alu.rd <= 0;
+            prf_register[ALUr_rd] <= 0;
         end else begin
-            prf_alu.value <= alu_out;
-            prf_alu.rd <= instr_alu.rd;
+            prf_register[ALUr_rd] <= alu_out;
         end
-        prf_alu.pc <= pc_alu;
+        for (int i = 0; i < rob_stack_count; i++) begin
+            if (pc_alu == ROB[i].pc) begin
+                ROB[i].state <= ROB_FINISHED;
+            end
+        end
     
     end
 
     // ====== MEM Issue Stage ======================================================
     logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2, mem_op_out, data_word_address_mem;
+    logic [6:0] MEMr_rd;
     instruct_t instr_mem;
     alu_op_t mem_op;
     assign mem_op = alu_op_e(instr_mem.op, instr_mem.funct3, instr_mem.funct7);
@@ -277,12 +292,14 @@ module top
             mem_read_in2 <= MEMr_rd2;
             pc_mem_read <= pc_mem;
             instr_mem_read <= instr_mem;
+            MEMr_read_rd <= MEMr_rd;
             data_word_address <= data_word_address_mem;
         end
     end
 
     // ====== MEM Read Stage ======================================================
     logic [XLEN-1:0] pc_mem_read, mem_read_in1, mem_read_in2, data_read_out, dm_a, dm_wd;
+    logic [6:0] MEMr_read_rd;
     instruct_t instr_mem_read;
     logic [7:0] data_byte_cache[0:XLEN-1]; // 32 byte data cache
     logic [XLEN-1:0] data_word_address;
@@ -351,58 +368,40 @@ module top
     end
 
     always_ff @(posedge clk) begin
-        prf_mem.value <= mem_out;
-        prf_mem.rd <= instr_mem_read.rd;
-        prf_mem.pc <= pc_mem_read;
         cache_busy[data_word_address] <= 1'b0;
+               
+        prf_register[MEMr_read_rd] <= mem_out;
+        for (int i = 0; i < rob_stack_count; i++) begin
+            if (pc_mem_read == ROB[i].pc) begin
+                ROB[i].state <= ROB_FINISHED;
+            end
+        end
     end
 
     // ====== Commit Stage ========================================================
     logic [XLEN-1:0] r_wd3;
     logic [4:0] commit_rd;
-    prf_t prf_alu, prf_mem;
-    prf_t PRF [0:XLEN-1];
-    logic [4:0] prf_stack_count;
 
-    always_ff @(negedge clk) begin
-      if ((prf_alu.pc != 0) && (prf_mem.pc != 0)) begin
-        PRF[prf_stack_count] <= prf_alu;
-        PRF[prf_stack_count+1] <= prf_mem;
-        prf_stack_count <= prf_stack_count + 2;
-      end else if (prf_alu.pc != 0) begin
-        PRF[prf_stack_count] <= prf_alu;
-        prf_stack_count <= prf_stack_count + 1;
-      end else if (prf_mem.pc != 0) begin
-        PRF[prf_stack_count] <= prf_mem;
-        prf_stack_count <= prf_stack_count + 1;
-      end
-    end
 
     always_ff @(posedge clk) begin
-        if (prf_stack_count > 0) begin
-            for (int i = 0; i < prf_stack_count; i++) begin
-                if ((PRF[i].pc == ROB[0].pc) && (ROB[i].valid == 1)) begin
-                    pc_o <= PRF[i].pc;
+                if (ROB[0].state == ROB_FINISHED) begin
+                    pc_o <= ROB[0].pc;
                     instr_o <= ROB[0].instr;
-                    reg_data_o <= PRF[i].value;
-                    reg_addr_o <= PRF[i].rd;
+                    reg_data_o <= prf_register[ROB[0].prf_rd];
+                    reg_addr_o <= ROB[0].arf_rd;
                     update_o <= 1;
-                    r_wd3 <= PRF[i].value;
-                    commit_rd <= PRF[i].rd;
+                    r_wd3 <= prf_register[ROB[0].prf_rd];
+                    commit_rd <= ROB[0].arf_rd;
                     for (int i2 = 0; i2 < 31; i2++) begin
                     ROB[i2] <= ROB[i2+1];
                     end
                     rob_stack_count <= rob_stack_count - 1;
                     ROB[31] <= '0;
-                    for (int i3 = i; i3 < 31-i; i3++) begin
-                        PRF[i3] <= PRF[i3+1];
-                    end
-                    prf_stack_count <= prf_stack_count - 1;
-                    PRF[31] <= '0;
+                    prf_register[ROB[0].prf_rd] <= 0;
+                    rename_table[ROB[0].arf_rd] <= 0;
+                    free_list[ROB[0].prf_rd] <= 1'b0;
 
                 end 
-            end
-        end
         else begin
             update_o <= 0;
             r_wd3 <= 0;
@@ -412,10 +411,8 @@ module top
     always_ff @(negedge clk) begin
         if (commit_rd == 0) begin
             register[0] <= 0;
-            register_busy[commit_rd] <= 1'b0;
         end else begin
             register[commit_rd] <= r_wd3;
-            register_busy[commit_rd] <= 1'b0;
         end
     end
 

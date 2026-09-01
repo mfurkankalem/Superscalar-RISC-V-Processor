@@ -2,15 +2,11 @@ package riscv_pkg;
 
   localparam INST_START = 32'h80000000;
   localparam XLEN = 32'd32;
+  localparam PRF_SIZE = 32'd128;
 
   //====================================================================
   // Core structs
   //====================================================================
-  typedef struct packed {
-    logic [4:0]      rd;
-    logic [XLEN-1:0] pc;
-    logic [XLEN-1:0] value;
-  } prf_t;
 
   typedef enum logic [1:0] {
     ALU = 2'b01,
@@ -18,8 +14,18 @@ package riscv_pkg;
     INV = 2'b11
   } issue_t;
 
+  typedef enum logic [1:0] {
+    ROB_ZERO = 2'b00,
+    ROB_PENDING = 2'b01,
+    ROB_SPECULATIVE = 2'b10,
+    ROB_FINISHED = 2'b11
+  } state;
+
   typedef struct packed {
-    logic            valid;
+    state            state;
+    logic [6:0]      prf_rd;
+    logic [4:0]      arf_rd;
+    logic [6:0]      prev_prf_rd;
     logic [XLEN-1:0] instr;
     logic [XLEN-1:0] pc;
   } rob_t;
@@ -65,9 +71,9 @@ package riscv_pkg;
   typedef struct packed {
 
     issue_t          issue;
-    logic [4:0]      rs2;
-    logic [4:0]      rs1;
-    logic [4:0]      rd;
+    logic [6:0]      prf_rs1;
+    logic [6:0]      prf_rs2;
+    logic [6:0]      prf_rd;
     instruct_t       instr;
     logic [XLEN-1:0] pc;
   } iq_t;
