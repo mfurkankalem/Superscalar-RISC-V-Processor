@@ -94,6 +94,7 @@ module top
             for (int i = 1; i < PRF_SIZE; i++) begin
                 if (free_list[i] == 1'b0) begin
                     free_list[i] <= 1'b1;
+                    busy_table[i] <= 1'b1;
                     IQ[iq_stack_count].prf_rd <= 7'(i);
                     rename_table[decoded_d.rd] <= 7'(i);
                     ROB[rob_stack_count].prf_rd <= 7'(i);
