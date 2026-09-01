@@ -76,6 +76,7 @@ module top
     logic [XLEN-1:0] cache_busy;
     logic [XLEN-1:0] prf_register [0:PRF_SIZE-1];
     logic [6:0] rename_table [0:XLEN-1];
+    logic [PRF_SIZE-1:0] busy_table;
     logic [PRF_SIZE-1:0] free_list;
     rob_t ROB [0:XLEN-1];
     iq_t IQ [0:XLEN-1];
@@ -84,10 +85,6 @@ module top
     instruct_t decoded_d;
 
     assign decoded_d = decode_code(instr_d);
-
-
-
-
 
     always_ff @(negedge clk) begin
         if ((pc_d >= INST_START)&& ((instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
@@ -125,12 +122,12 @@ module top
         mem_number = '0;
         if (pc_d >= INST_START) begin
             for (int i = 0; i < 10; i++) begin
-                if (!alu_done && (IQ[i].issue == ALU)) begin
+                if (!alu_done && (IQ[i].issue == ALU) && (busy_table[IQ[i].prf_rs1] == 1'b0) && (busy_table[IQ[i].prf_rs2] == 1'b0)) begin
                     alu_number = i;
                     alu_done = 1;
                     break;
                 end
-                if (!mem_done && (IQ[i].issue == MEM)) begin
+                if (!mem_done && (IQ[i].issue == MEM) && (busy_table[IQ[i].prf_rs1] == 1'b0) && (busy_table[IQ[i].prf_rs2] == 1'b0)) begin
                     mem_number = i;
                     mem_done = 1;
                     break;
@@ -147,6 +144,7 @@ module top
             pc_alu <= IQ[alu_number].pc;
             instr_alu <= IQ[alu_number].instr;
             imm_alu <= IQ[alu_number].instr.imm;
+            busy_table[IQ[alu_number].prf_rd] <= 1'b1;
             MEMr_rd1 <= 0;
             MEMr_rd2 <= 0;
             pc_mem <= 0;
@@ -166,6 +164,7 @@ module top
             imm_alu <= 0;
             MEMr_rd1 <= prf_register[IQ[mem_number].prf_rs1];
             MEMr_rd2 <= prf_register[IQ[mem_number].prf_rs2];
+            busy_table[IQ[mem_number].prf_rd] <= 1'b1;
             MEMr_rd <= IQ[mem_number].prf_rd;
             pc_mem <= IQ[mem_number].pc;
             instr_mem <= IQ[mem_number].instr;
@@ -263,7 +262,6 @@ module top
                 ROB[i].state <= ROB_FINISHED;
             end
         end
-    
     end
 
     // ====== MEM Issue Stage ======================================================
@@ -369,7 +367,7 @@ module top
 
     always_ff @(posedge clk) begin
         cache_busy[data_word_address] <= 1'b0;
-               
+
         prf_register[MEMr_read_rd] <= mem_out;
         for (int i = 0; i < rob_stack_count; i++) begin
             if (pc_mem_read == ROB[i].pc) begin
@@ -382,26 +380,24 @@ module top
     logic [XLEN-1:0] r_wd3;
     logic [4:0] commit_rd;
 
-
     always_ff @(posedge clk) begin
-                if (ROB[0].state == ROB_FINISHED) begin
-                    pc_o <= ROB[0].pc;
-                    instr_o <= ROB[0].instr;
-                    reg_data_o <= prf_register[ROB[0].prf_rd];
-                    reg_addr_o <= ROB[0].arf_rd;
-                    update_o <= 1;
-                    r_wd3 <= prf_register[ROB[0].prf_rd];
-                    commit_rd <= ROB[0].arf_rd;
-                    for (int i2 = 0; i2 < 31; i2++) begin
-                    ROB[i2] <= ROB[i2+1];
-                    end
-                    rob_stack_count <= rob_stack_count - 1;
-                    ROB[31] <= '0;
-                    prf_register[ROB[0].prf_rd] <= 0;
-                    rename_table[ROB[0].arf_rd] <= 0;
-                    free_list[ROB[0].prf_rd] <= 1'b0;
-
-                end 
+        if (ROB[0].state == ROB_FINISHED) begin
+            pc_o <= ROB[0].pc;
+            instr_o <= ROB[0].instr;
+            reg_data_o <= prf_register[ROB[0].prf_rd];
+            reg_addr_o <= ROB[0].arf_rd;
+            update_o <= 1;
+            r_wd3 <= prf_register[ROB[0].prf_rd];
+            commit_rd <= ROB[0].arf_rd;
+            for (int i2 = 0; i2 < 31; i2++) begin
+                ROB[i2] <= ROB[i2+1];
+            end
+            rob_stack_count <= rob_stack_count - 1;
+            ROB[31] <= '0;
+            prf_register[ROB[0].prev_prf_rd] <= 0;
+            free_list[ROB[0].prev_prf_rd] <= 1'b0;
+            busy_table[ROB[0].prf_rd] <= 1'b0;
+        end
         else begin
             update_o <= 0;
             r_wd3 <= 0;
