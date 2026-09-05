@@ -91,6 +91,7 @@ module top
             IQ[iq_stack_count].issue <= decoded_d.issue;
             IQ[iq_stack_count].prf_rs1 <= rename_table[decoded_d.rs1];
             IQ[iq_stack_count].prf_rs2 <= rename_table[decoded_d.rs2];
+            if (decoded_d.rd != 0) begin
             for (int i = 1; i < PRF_SIZE; i++) begin
                 if (free_list[i] == 1'b0) begin
                     free_list[i] <= 1'b1;
@@ -102,6 +103,13 @@ module top
                     ROB[rob_stack_count].prev_prf_rd <= rename_table[decoded_d.rd];
                     break;
                 end
+            end
+            end
+            else begin
+                IQ[iq_stack_count].prf_rd <= 7'(0);
+                ROB[rob_stack_count].prf_rd <= 7'(0);
+                ROB[rob_stack_count].arf_rd <= 5'(0);
+                ROB[rob_stack_count].prev_prf_rd <= 7'(0);
             end
             IQ[iq_stack_count].instr <= decoded_d;
             IQ[iq_stack_count].pc <= pc_d;
@@ -122,7 +130,7 @@ module top
         mem_done = 1'b0;
         mem_number = '0;
         if (pc_d >= INST_START) begin
-            for (int i = 0; i < 10; i++) begin
+            for (int i = 0; i < XLEN; i++) begin
                 if (!alu_done && (IQ[i].issue == ALU) && (busy_table[IQ[i].prf_rs1] == 1'b0) && (busy_table[IQ[i].prf_rs2] == 1'b0)) begin
                     alu_number = i;
                     alu_done = 1;
@@ -145,7 +153,9 @@ module top
             pc_alu <= IQ[alu_number].pc;
             instr_alu <= IQ[alu_number].instr;
             imm_alu <= IQ[alu_number].instr.imm;
-            busy_table[IQ[alu_number].prf_rd] <= 1'b1;
+            if (IQ[alu_number].prf_rd != 0) begin
+                busy_table[IQ[alu_number].prf_rd] <= 1'b1;
+            end
             MEMr_rd1 <= 0;
             MEMr_rd2 <= 0;
             pc_mem <= 0;
@@ -250,6 +260,14 @@ module top
         end
     end
 
+    always_ff @(negedge clk) begin
+        for (int i = 0; i < rob_stack_count; i++) begin
+            if (pc_alu == ROB[i].pc) begin
+                ROB[i].state <= ROB_FINISHED;
+            end
+        end
+    end
+
     always_ff @(posedge clk) begin
         if (pc_redirect) begin
             prf_register[ALUr_rd] <= pc_alu + 4;
@@ -257,11 +275,6 @@ module top
             prf_register[ALUr_rd] <= 0;
         end else begin
             prf_register[ALUr_rd] <= alu_out;
-        end
-        for (int i = 0; i < rob_stack_count; i++) begin
-            if (pc_alu == ROB[i].pc) begin
-                ROB[i].state <= ROB_FINISHED;
-            end
         end
     end
 
@@ -431,6 +444,7 @@ module top
             OP_ITYPE: begin
                 decode_function.imm = {{20{instr[31]}}, instr[31:20]};
                 decode_function.rs1 = instr[19:15];
+                decode_function.rs2 = 0;
                 decode_function.funct3 = instr[14:12];
                 decode_function.rd = instr[11:7];
                 if(decode_function.op == OP_LOAD) begin

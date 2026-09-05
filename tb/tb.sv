@@ -53,7 +53,7 @@ module tb ();
     #2;
     rstn = 1;
     #2
-    #2000;
+    #3000;
     for (int i = 0; i < riscv_pkg::XLEN/4; i++) begin
       addr = i*4;
       $display("data @ mem[0x%8h] = %8h", addr, data[addr]);
