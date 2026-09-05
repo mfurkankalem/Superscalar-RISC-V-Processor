@@ -10,10 +10,15 @@ module top
         input logic rstn_i, // system reset
         input logic [XLEN-1:0] addr_i, // data memory report
         output logic update_o, // log update signal
+        output logic update_o2, // log update signal
         output logic [XLEN-1:0] pc_o, // log program counter
+        output logic [XLEN-1:0] pc_o2, // log program counter
         output logic [XLEN-1:0] instr_o, // log instruction
+        output logic [XLEN-1:0] instr_o2, // log instruction
         output logic [4:0] reg_addr_o, // log register address
+        output logic [4:0] reg_addr_o2, // log register address
         output logic [XLEN-1:0] reg_data_o, // log register data
+        output logic [XLEN-1:0] reg_data_o2, // log register data
         output logic [XLEN-1:0] mem_addr_o, // retired memory address
         output logic [31:0] data_o[0:XLEN-1], // data memory write
         output logic [XLEN-1:0] mem_data_o // retired memory data
@@ -71,7 +76,7 @@ module top
 
     // ====== Decode Stage =========================================================
     logic [XLEN-1:0]
-    pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, MEMr_rd1, MEMr_rd2;
+    pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, ALU2r_rd1, ALU2r_rd2, MEMr_rd1, MEMr_rd2;
     logic [XLEN-1:0] register[0:XLEN-1]; //register file
     logic [XLEN-1:0] cache_busy;
     logic [XLEN-1:0] prf_register [0:PRF_SIZE-1];
@@ -79,41 +84,72 @@ module top
     logic [PRF_SIZE-1:0] busy_table;
     logic [PRF_SIZE-1:0] free_list;
     rob_t ROB [0:XLEN-1];
-    iq_t IQ [0:XLEN-1];
+    iq_t IQ_ALU [0:XLEN-1];
+    iq_t IQ_MEM [0:XLEN-1];
     logic [4:0] rob_stack_count;
-    logic [4:0] iq_stack_count;
+    logic [4:0] iq_alu_stack_count;
+    logic [4:0] iq_mem_stack_count;
     instruct_t decoded_d;
 
     assign decoded_d = decode_code(instr_d);
 
     always_ff @(negedge clk) begin
         if ((pc_d >= INST_START)&& ((instr_d != 0))&& (rob_stack_count < 5'(XLEN - 5))) begin
-            IQ[iq_stack_count].issue <= decoded_d.issue;
-            IQ[iq_stack_count].prf_rs1 <= rename_table[decoded_d.rs1];
-            IQ[iq_stack_count].prf_rs2 <= rename_table[decoded_d.rs2];
-            if (decoded_d.rd != 0) begin
-            for (int i = 1; i < PRF_SIZE; i++) begin
-                if (free_list[i] == 1'b0) begin
-                    free_list[i] <= 1'b1;
-                    busy_table[i] <= 1'b1;
-                    IQ[iq_stack_count].prf_rd <= 7'(i);
-                    rename_table[decoded_d.rd] <= 7'(i);
-                    ROB[rob_stack_count].prf_rd <= 7'(i);
-                    ROB[rob_stack_count].arf_rd <= decoded_d.rd;
-                    ROB[rob_stack_count].prev_prf_rd <= rename_table[decoded_d.rd];
-                    break;
+            if(decoded_d.issue == ALU) begin
+                IQ_ALU[iq_alu_stack_count].issue <= decoded_d.issue;
+                IQ_ALU[iq_alu_stack_count].prf_rs1 <= rename_table[decoded_d.rs1];
+                IQ_ALU[iq_alu_stack_count].prf_rs2 <= rename_table[decoded_d.rs2];
+                if (decoded_d.rd != 0) begin
+                for (int i = 1; i < PRF_SIZE; i++) begin
+                    if (free_list[i] == 1'b0) begin
+                        free_list[i] <= 1'b1;
+                        busy_table[i] <= 1'b1;
+                        IQ_ALU[iq_alu_stack_count].prf_rd <= 7'(i);
+                        rename_table[decoded_d.rd] <= 7'(i);
+                        ROB[rob_stack_count].prf_rd <= 7'(i);
+                        ROB[rob_stack_count].arf_rd <= decoded_d.rd;
+                        ROB[rob_stack_count].prev_prf_rd <= rename_table[decoded_d.rd];
+                        break;
+                    end
                 end
+                end
+                else begin
+                    IQ_ALU[iq_alu_stack_count].prf_rd <= 7'(0);
+                    ROB[rob_stack_count].prf_rd <= 7'(0);
+                    ROB[rob_stack_count].arf_rd <= 5'(0);
+                    ROB[rob_stack_count].prev_prf_rd <= 7'(0);
+                end
+                IQ_ALU[iq_alu_stack_count].instr <= decoded_d;
+                IQ_ALU[iq_alu_stack_count].pc <= pc_d;
+                iq_alu_stack_count <= iq_alu_stack_count + 1;
+            end else if (decoded_d.issue == MEM) begin
+                IQ_MEM[iq_mem_stack_count].issue <= decoded_d.issue;
+                IQ_MEM[iq_mem_stack_count].prf_rs1 <= rename_table[decoded_d.rs1];
+                IQ_MEM[iq_mem_stack_count].prf_rs2 <= rename_table[decoded_d.rs2];
+                if (decoded_d.rd != 0) begin
+                for (int i = 1; i < PRF_SIZE; i++) begin
+                    if (free_list[i] == 1'b0) begin
+                        free_list[i] <= 1'b1;
+                        busy_table[i] <= 1'b1;
+                        IQ_MEM[iq_mem_stack_count].prf_rd <= 7'(i);
+                        rename_table[decoded_d.rd] <= 7'(i);
+                        ROB[rob_stack_count].prf_rd <= 7'(i);
+                        ROB[rob_stack_count].arf_rd <= decoded_d.rd;
+                        ROB[rob_stack_count].prev_prf_rd <= rename_table[decoded_d.rd];
+                        break;
+                    end
+                end
+                end
+                else begin
+                    IQ_MEM[iq_mem_stack_count].prf_rd <= 7'(0);
+                    ROB[rob_stack_count].prf_rd <= 7'(0);
+                    ROB[rob_stack_count].arf_rd <= 5'(0);
+                    ROB[rob_stack_count].prev_prf_rd <= 7'(0);
+                end
+                IQ_MEM[iq_mem_stack_count].instr <= decoded_d;
+                IQ_MEM[iq_mem_stack_count].pc <= pc_d;
+                iq_mem_stack_count <= iq_mem_stack_count + 1;
             end
-            end
-            else begin
-                IQ[iq_stack_count].prf_rd <= 7'(0);
-                ROB[rob_stack_count].prf_rd <= 7'(0);
-                ROB[rob_stack_count].arf_rd <= 5'(0);
-                ROB[rob_stack_count].prev_prf_rd <= 7'(0);
-            end
-            IQ[iq_stack_count].instr <= decoded_d;
-            IQ[iq_stack_count].pc <= pc_d;
-            iq_stack_count <= iq_stack_count + 1;
             ROB[rob_stack_count].pc <= pc_d;
             ROB[rob_stack_count].state <= ROB_PENDING;
             ROB[rob_stack_count].instr <= instr_d;
@@ -121,83 +157,131 @@ module top
         end
     end
 
-    logic alu_done, mem_done;
-    int alu_number, mem_number;
+    logic alu1_done, alu2_done, mem_done;
+    int alu1_number, alu2_number, mem_number;
 
     always_comb begin
-        alu_done = 1'b0;
-        alu_number = '0;
+        alu1_done = 1'b0;
+        alu1_number = '0;
+        alu2_done = 1'b0;
+        alu2_number = '0;
         mem_done = 1'b0;
         mem_number = '0;
         if (pc_d >= INST_START) begin
+            if(iq_alu_stack_count >0) begin
             for (int i = 0; i < XLEN; i++) begin
-                if (!alu_done && (IQ[i].issue == ALU) && (busy_table[IQ[i].prf_rs1] == 1'b0) && (busy_table[IQ[i].prf_rs2] == 1'b0)) begin
-                    alu_number = i;
-                    alu_done = 1;
+                if (i==32'(iq_alu_stack_count)) begin
                     break;
                 end
-                if (!mem_done && (IQ[i].issue == MEM) && (busy_table[IQ[i].prf_rs1] == 1'b0) && (busy_table[IQ[i].prf_rs2] == 1'b0)) begin
+                else if (!alu1_done && (busy_table[IQ_ALU[i].prf_rs1] == 1'b0) && (busy_table[IQ_ALU[i].prf_rs2] == 1'b0)) begin
+                    alu1_number = i;
+                    alu1_done = 1;
+                end else if ((iq_alu_stack_count>1) && alu1_done && (busy_table[IQ_ALU[i].prf_rs1] == 1'b0) && (busy_table[IQ_ALU[i].prf_rs2] == 1'b0)) begin
+                    alu2_number = i;
+                    alu2_done = 1;
+                    break;
+                end 
+            end
+            end
+            if(iq_mem_stack_count >0) begin
+            for (int i = 0; i < XLEN; i++) begin
+                if (!mem_done && (busy_table[IQ_MEM[i].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[i].prf_rs2] == 1'b0)) begin
                     mem_number = i;
                     mem_done = 1;
                     break;
                 end
             end
+            end
         end
     end
 
     always_ff @(posedge clk) begin
-        if (alu_done && !mem_done) begin
-            ALUr_rd1 <= prf_register[IQ[alu_number].prf_rs1];
-            ALUr_rd2 <= prf_register[IQ[alu_number].prf_rs2];
-            ALUr_rd <= IQ[alu_number].prf_rd;
-            pc_alu <= IQ[alu_number].pc;
-            instr_alu <= IQ[alu_number].instr;
-            imm_alu <= IQ[alu_number].instr.imm;
-            if (IQ[alu_number].prf_rd != 0) begin
-                busy_table[IQ[alu_number].prf_rd] <= 1'b1;
+        if (alu1_done) begin
+            ALUr_rd1 <= prf_register[IQ_ALU[alu1_number].prf_rs1];
+            ALUr_rd2 <= prf_register[IQ_ALU[alu1_number].prf_rs2];
+            ALUr_rd <= IQ_ALU[alu1_number].prf_rd;
+            pc_alu <= IQ_ALU[alu1_number].pc;
+            instr_alu <= IQ_ALU[alu1_number].instr;
+            imm_alu <= IQ_ALU[alu1_number].instr.imm;
+            if (busy_table[IQ_ALU[alu1_number].prf_rd] != 0) begin
+                busy_table[IQ_ALU[alu1_number].prf_rd] <= 1'b1;
             end
-            MEMr_rd1 <= 0;
-            MEMr_rd2 <= 0;
-            pc_mem <= 0;
-            instr_mem <= 0;
-            imm_mem <= 0;
-            iq_stack_count <= iq_stack_count - 1;
-            for (int i = alu_number; i < 31-alu_number; i++) begin
-                IQ[i] <= IQ[i+1];
-            end
-            IQ[31] <= '0;
-        end
-        else if (!alu_done && mem_done) begin
-            ALUr_rd1 <= 0;
-            ALUr_rd2 <= 0;
-            pc_alu <= 0;
-            instr_alu <= 0;
-            imm_alu <= 0;
-            MEMr_rd1 <= prf_register[IQ[mem_number].prf_rs1];
-            MEMr_rd2 <= prf_register[IQ[mem_number].prf_rs2];
-            busy_table[IQ[mem_number].prf_rd] <= 1'b1;
-            MEMr_rd <= IQ[mem_number].prf_rd;
-            pc_mem <= IQ[mem_number].pc;
-            instr_mem <= IQ[mem_number].instr;
-            imm_mem <= IQ[mem_number].instr.imm;
-            iq_stack_count <= iq_stack_count - 1;
-            for (int i = mem_number; i < 31-mem_number; i++) begin
-                IQ[i] <= IQ[i+1];
-            end
-            IQ[31] <= '0;
         end
         else begin
             ALUr_rd1 <= 0;
             ALUr_rd2 <= 0;
+            ALUr_rd <= 0;
             pc_alu <= 0;
             instr_alu <= 0;
             imm_alu <= 0;
+        end
+        if (alu2_done) begin
+            ALU2r_rd1 <= prf_register[IQ_ALU[alu2_number].prf_rs1];
+            ALU2r_rd2 <= prf_register[IQ_ALU[alu2_number].prf_rs2];
+            ALU2r_rd <= IQ_ALU[alu2_number].prf_rd;
+            pc_alu2 <= IQ_ALU[alu2_number].pc;
+            instr_alu2 <= IQ_ALU[alu2_number].instr;
+            imm_alu2 <= IQ_ALU[alu2_number].instr.imm;
+            if (busy_table[IQ_ALU[alu2_number].prf_rd] != 0) begin
+                busy_table[IQ_ALU[alu2_number].prf_rd] <= 1'b1;
+            end
+        end
+        else begin
+            ALU2r_rd1 <= 0;
+            ALU2r_rd2 <= 0;
+            ALU2r_rd <= 0;
+            pc_alu2 <= 0;
+            instr_alu2 <= 0;
+            imm_alu2 <= 0;
+        end
+        if(mem_done) begin
+            MEMr_rd1 <= prf_register[IQ_MEM[mem_number].prf_rs1];
+            MEMr_rd2 <= prf_register[IQ_MEM[mem_number].prf_rs2];
+            MEMr_rd <= IQ_MEM[mem_number].prf_rd;
+            pc_mem <= IQ_MEM[mem_number].pc;
+            instr_mem <= IQ_MEM[mem_number].instr;
+            imm_mem <= IQ_MEM[mem_number].instr.imm;
+            if (busy_table[IQ_MEM[mem_number].prf_rd] != 0) begin
+                busy_table[IQ_MEM[mem_number].prf_rd] <= 1'b1;
+            end
+            for (int i = mem_number; i < 31-mem_number; i++) begin
+                IQ_MEM[i] <= IQ_MEM[i+1];
+            end
+            IQ_MEM[31] <= '0;
+        end
+        else begin
             MEMr_rd1 <= 0;
             MEMr_rd2 <= 0;
+            MEMr_rd <= 0;
             pc_mem <= 0;
             instr_mem <= 0;
             imm_mem <= 0;
         end
+        if (alu1_done && alu2_done) begin
+            for (int i = alu1_number; i < 31-alu1_number; i++) begin
+                if (i >= alu2_number-alu1_number-1) begin
+                    IQ_ALU[i] <= IQ_ALU[i+2];
+                end else begin
+                    IQ_ALU[i] <= IQ_ALU[i+1];
+                end
+            end
+            IQ_ALU[30] <= '0;
+            IQ_ALU[31] <= '0;
+            iq_alu_stack_count <= iq_alu_stack_count - 2;
+        end else if (alu1_done && !alu2_done) begin
+            for (int i = alu1_number; i < 31-alu1_number; i++) begin
+                IQ_ALU[i] <= IQ_ALU[i+1];
+            end
+            IQ_ALU[31] <= '0;
+            iq_alu_stack_count <= iq_alu_stack_count - 1;
+        end else if (alu2_done && !alu1_done) begin
+            for (int i = alu2_number; i < 31-alu2_number; i++) begin
+                IQ_ALU[i] <= IQ_ALU[i+1];
+            end
+            IQ_ALU[31] <= '0;
+            iq_alu_stack_count <= iq_alu_stack_count - 1;
+        end
+
     end
 
     // ====== ALU Issue Stage ======================================================
@@ -261,22 +345,93 @@ module top
     end
 
     always_ff @(negedge clk) begin
-        for (int i = 0; i < rob_stack_count; i++) begin
-            if (pc_alu == ROB[i].pc) begin
-                ROB[i].state <= ROB_FINISHED;
-            end
-        end
-    end
-
-    always_ff @(posedge clk) begin
         if (pc_redirect) begin
             prf_register[ALUr_rd] <= pc_alu + 4;
-        end else if (instr_alu.optype == OP_BTYPE) begin
+        end else if ((instr_alu.optype == OP_BTYPE)|| ALUr_rd == 0) begin
             prf_register[ALUr_rd] <= 0;
         end else begin
             prf_register[ALUr_rd] <= alu_out;
         end
     end
+
+// ====== ALU2 Issue Stage ======================================================
+    logic [XLEN-1:0] pc_alu2, imm_alu2, alu2_in1, alu2_in2, alu2_out;
+    logic [6:0] ALU2r_rd;
+    instruct_t instr_alu2;
+    alu_op_t alu2_op;
+    assign alu2_op = alu_op_e(instr_alu2.op, instr_alu2.funct3, instr_alu2.funct7);
+
+    always_comb begin
+        if (instr_alu2.op == OP_AUIPC) begin
+            alu2_in1 = pc_alu2;
+        end else begin
+            alu2_in1 = ALU2r_rd1;
+        end
+        if ((instr_alu2.op == OP_JAL) || (instr_alu2.optype == OP_RTYPE) || (instr_alu2.optype == OP_BTYPE)) begin
+            alu2_in2 = ALU2r_rd2;
+        end else begin
+            alu2_in2 = imm_alu2;
+        end
+    end
+
+    assign alu2_out = alu_result(alu2_in1, alu2_in2, alu2_op);
+
+    always_comb begin
+        pc_redirect = 1'b0;
+        if (instr_alu2.optype == OP_BTYPE) begin
+            case (instr_alu2.funct3)
+                F3_BEQ: pc_redirect = (alu2_out == 32'd0); // BEQ
+                F3_BNE: pc_redirect = (alu2_out != 32'd0); // BNE
+                F3_BLT: pc_redirect = (alu2_out == 32'd1); // BLT
+                F3_BGE: pc_redirect = (alu2_out == 32'd0); // BGE
+                F3_BLTU: pc_redirect = (alu2_out == 32'd1); // BLTU
+                F3_BGEU: pc_redirect = (alu2_out == 32'd0); // BGEU
+                default: pc_redirect = 1'b0;
+            endcase
+        end else if ((instr_alu2.op == OP_JAL) || (instr_alu2.op == OP_JALR)) begin
+            pc_redirect = 1'b1;
+        end
+
+        if (pc_redirect) begin
+            flush_d = 1;
+            en_d = 0;
+            en_f = 0;
+            if (instr_alu2.op == OP_JALR) begin
+                pc_src = alu2_out;
+            end else begin
+                if ($signed(imm_alu2) < 0) begin
+                    pc_src = pc_alu2 + ($signed(imm_alu2));
+                end else begin
+                    pc_src = pc_alu2 + imm_alu2;
+                end
+            end
+        end else begin
+            pc_src = 0;
+            en_d = 1;
+            en_f = 1;
+            flush_d = 0;
+        end
+    end
+
+    always_ff @(negedge clk) begin
+        for (int i = 0; i < rob_stack_count; i++) begin
+            if ((pc_alu2 == ROB[i].pc) || (pc_alu == ROB[i].pc) || (pc_mem == ROB[i].pc) ) begin
+                ROB[i].state <= ROB_FINISHED;
+            end
+        end
+    end
+
+
+    always_ff @(negedge clk) begin
+        if (pc_redirect) begin
+            prf_register[ALUr_rd] <= pc_alu + 4;
+        end else if ((instr_alu.optype == OP_BTYPE)|| ALUr_rd == 0) begin
+            prf_register[ALUr_rd] <= 0;
+        end else begin
+            prf_register[ALUr_rd] <= alu_out;
+        end
+    end
+
 
     // ====== MEM Issue Stage ======================================================
     logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2, mem_op_out, data_word_address_mem;
@@ -391,8 +546,8 @@ module top
     end
 
     // ====== Commit Stage ========================================================
-    logic [XLEN-1:0] r_wd3;
-    logic [4:0] commit_rd;
+    logic [XLEN-1:0] r_wd3, r_wd3_2;
+    logic [4:0] commit_rd, commit_rd2;
 
     always_ff @(posedge clk) begin
         if (ROB[0].state == ROB_FINISHED) begin
@@ -403,14 +558,37 @@ module top
             update_o <= 1;
             r_wd3 <= prf_register[ROB[0].prf_rd];
             commit_rd <= ROB[0].arf_rd;
-            for (int i2 = 0; i2 < 31; i2++) begin
-                ROB[i2] <= ROB[i2+1];
-            end
-            rob_stack_count <= rob_stack_count - 1;
-            ROB[31] <= '0;
             prf_register[ROB[0].prev_prf_rd] <= 0;
             free_list[ROB[0].prev_prf_rd] <= 1'b0;
             busy_table[ROB[0].prf_rd] <= 1'b0;
+            if(ROB[1].state == ROB_FINISHED) begin
+                pc_o2 <= ROB[1].pc;
+                instr_o2 <= ROB[1].instr;
+                reg_data_o2 <= prf_register[ROB[1].prf_rd];
+                reg_addr_o2 <= ROB[1].arf_rd;
+                update_o2 <= 1;
+                r_wd3_2 <= prf_register[ROB[1].prf_rd];
+                commit_rd2 <= ROB[1].arf_rd;
+                prf_register[ROB[1].prev_prf_rd] <= 0;
+                free_list[ROB[1].prev_prf_rd] <= 1'b0;
+                busy_table[ROB[1].prf_rd] <= 1'b0;
+                for (int i2 = 0; i2 < 30; i2++) begin
+                ROB[i2] <= ROB[i2+2];
+                end
+                rob_stack_count <= rob_stack_count - 2;
+                ROB[30] <= '0;
+                ROB[31] <= '0;
+            end else begin
+                for (int i2 = 0; i2 < 31; i2++) begin
+                ROB[i2] <= ROB[i2+1];
+                end
+                rob_stack_count <= rob_stack_count - 1;
+                ROB[31] <= '0;
+                update_o2 <= 0;
+                commit_rd2 <= 0;
+                r_wd3_2 <= 0;
+            end
+        
         end
         else begin
             update_o <= 0;
@@ -423,6 +601,11 @@ module top
             register[0] <= 0;
         end else begin
             register[commit_rd] <= r_wd3;
+        end
+        if (commit_rd2 == 0) begin
+            register[0] <= 0;
+        end else begin
+            register[commit_rd2] <= r_wd3_2;
         end
     end
 
