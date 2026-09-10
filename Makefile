@@ -3,7 +3,7 @@ TB_FILES = ${wildcard ./tb/*.sv}
 ALL_FILES = ${SV_FILES} ${TB_FILES}
 
 
-VERILATOR_FLAGS = --binary ${SV_FILES} ${TB_FILES} --top tb \
+VERILATOR_FLAGS = --binary ${ALL_FILES} --top tb \
                   -j 2 -O0 --trace --trace-max-array 256 \
                   -CFLAGS "-O0" \
                   -MAKEFLAGS "OPT_FAST=-O0 OPT_SLOW=-O0" \

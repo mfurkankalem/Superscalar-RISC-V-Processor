@@ -347,12 +347,14 @@ module top
     always_ff @(negedge clk) begin
         if (pc_redirect) begin
             prf_register[ALUr_rd] <= pc_alu + 4;
-        end else if ((instr_alu.optype == OP_BTYPE)|| ALUr_rd == 0) begin
-            prf_register[ALUr_rd] <= 0;
-        end else begin
+        end else if (ALUr_rd != 0) begin
             prf_register[ALUr_rd] <= alu_out;
+        end else if (ALUr_rd == 0) begin
+            prf_register[ALUr_rd] <= 0;
         end
     end
+
+
 
 // ====== ALU2 Issue Stage ======================================================
     logic [XLEN-1:0] pc_alu2, imm_alu2, alu2_in1, alu2_in2, alu2_out;
@@ -424,11 +426,11 @@ module top
 
     always_ff @(negedge clk) begin
         if (pc_redirect) begin
-            prf_register[ALUr_rd] <= pc_alu + 4;
-        end else if ((instr_alu.optype == OP_BTYPE)|| ALUr_rd == 0) begin
-            prf_register[ALUr_rd] <= 0;
-        end else begin
-            prf_register[ALUr_rd] <= alu_out;
+            prf_register[ALU2r_rd] <= pc_alu2 + 4;
+        end  else if (ALU2r_rd != 0) begin
+            prf_register[ALU2r_rd] <= alu2_out;
+        end else if (ALU2r_rd == 0) begin
+            prf_register[ALU2r_rd] <= 0;
         end
     end
 
@@ -650,6 +652,7 @@ module top
                 };
                 decode_function.rs2 = instr[24:20];
                 decode_function.rs1 = instr[19:15];
+                decode_function.rd = 0;
                 decode_function.funct3 = instr[14:12];
                 decode_function.issue = ALU;
             end
