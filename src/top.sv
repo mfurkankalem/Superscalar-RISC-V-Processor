@@ -78,7 +78,6 @@ module top
     logic [XLEN-1:0]
     pc_d, instr_d, imm_d, ALUr_rd1, ALUr_rd2, ALU2r_rd1, ALU2r_rd2, MEMr_rd1, MEMr_rd2;
     logic [XLEN-1:0] register[0:XLEN-1]; //register file
-    logic [XLEN-1:0] cache_busy;
     logic [XLEN-1:0] prf_register [0:PRF_SIZE-1];
     logic [6:0] rename_table [0:XLEN-1];
     logic [PRF_SIZE-1:0] busy_table;
@@ -158,7 +157,7 @@ module top
     end
 
     logic alu1_done, alu2_done, mem_done;
-    int alu1_number, alu2_number, mem_number;
+    int alu1_number, alu2_number;
 
     always_comb begin
         alu1_done = 1'b0;
@@ -166,7 +165,6 @@ module top
         alu2_done = 1'b0;
         alu2_number = '0;
         mem_done = 1'b0;
-        mem_number = '0;
         if (pc_d >= INST_START) begin
             if(iq_alu_stack_count >0) begin
             for (int i = 0; i < XLEN; i++) begin
@@ -184,13 +182,11 @@ module top
             end
             end
             if(iq_mem_stack_count >0) begin
-            for (int i = 0; i < XLEN; i++) begin
-                if (!mem_done && (busy_table[IQ_MEM[i].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[i].prf_rs2] == 1'b0)) begin
-                    mem_number = i;
+             if (!en_m && (busy_table[IQ_MEM[0].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[0].prf_rs2] == 1'b0)) begin
                     mem_done = 1;
-                    break;
-                end
-            end
+             end else begin
+                    mem_done = 0;
+             end
             end
         end
     end
@@ -235,19 +231,20 @@ module top
             imm_alu2 <= 0;
         end
         if(mem_done) begin
-            MEMr_rd1 <= prf_register[IQ_MEM[mem_number].prf_rs1];
-            MEMr_rd2 <= prf_register[IQ_MEM[mem_number].prf_rs2];
-            MEMr_rd <= IQ_MEM[mem_number].prf_rd;
-            pc_mem <= IQ_MEM[mem_number].pc;
-            instr_mem <= IQ_MEM[mem_number].instr;
-            imm_mem <= IQ_MEM[mem_number].instr.imm;
-            if (busy_table[IQ_MEM[mem_number].prf_rd] != 0) begin
-                busy_table[IQ_MEM[mem_number].prf_rd] <= 1'b1;
+            MEMr_rd1 <= prf_register[IQ_MEM[0].prf_rs1];
+            MEMr_rd2 <= prf_register[IQ_MEM[0].prf_rs2];
+            MEMr_rd <= IQ_MEM[0].prf_rd;
+            pc_mem <= IQ_MEM[0].pc;
+            instr_mem <= IQ_MEM[0].instr;
+            imm_mem <= IQ_MEM[0].instr.imm;
+            if (busy_table[IQ_MEM[0].prf_rd] != 0) begin
+                busy_table[IQ_MEM[0].prf_rd] <= 1'b1;
             end
-            for (int i = mem_number; i < 31-mem_number; i++) begin
+            for (int i = 0; i < 31; i++) begin
                 IQ_MEM[i] <= IQ_MEM[i+1];
             end
             IQ_MEM[31] <= '0;
+            en_m <= 1;
         end
         else begin
             MEMr_rd1 <= 0;
@@ -417,7 +414,7 @@ module top
 
     always_ff @(negedge clk) begin
         for (int i = 0; i < rob_stack_count; i++) begin
-            if ((pc_alu2 == ROB[i].pc) || (pc_alu == ROB[i].pc) || (pc_mem == ROB[i].pc) ) begin
+            if ((pc_alu2 == ROB[i].pc) || (pc_alu == ROB[i].pc))  begin
                 ROB[i].state <= ROB_FINISHED;
             end
         end
@@ -436,41 +433,27 @@ module top
 
 
     // ====== MEM Issue Stage ======================================================
-    logic [XLEN-1:0] pc_mem, imm_mem, mem_in1, mem_in2, mem_op_out, data_word_address_mem;
+    logic [XLEN-1:0] pc_mem, imm_mem, mem_op_out;
     logic [6:0] MEMr_rd;
     instruct_t instr_mem;
     alu_op_t mem_op;
     assign mem_op = alu_op_e(instr_mem.op, instr_mem.funct3, instr_mem.funct7);
 
-    assign mem_in1 = MEMr_rd1;
-    assign mem_in2 = imm_mem;
-    assign mem_op_out = alu_result(mem_in1, mem_in2, mem_op);
-    assign data_word_address_mem = mem_op_out - (mem_op_out % 4);
+    assign mem_op_out = alu_result(MEMr_rd1, imm_mem, mem_op);
 
-    always_comb begin
-        if (cache_busy[data_word_address_mem]) begin
-            en_m = 0;
-        end else begin
-            en_m = 1;
-        end
-    end
     always_ff @(posedge clk) begin
-        if (en_m) begin
-            cache_busy[data_word_address_mem] <= 1'b1;
-            mem_read_in1 <= mem_op_out;
-            mem_read_in2 <= MEMr_rd2;
-            pc_mem_read <= pc_mem;
-            instr_mem_read <= instr_mem;
-            MEMr_read_rd <= MEMr_rd;
-            data_word_address <= data_word_address_mem;
-        end
+        mem_read_in <= MEMr_rd2;
+        pc_mem_read <= pc_mem;
+        instr_mem_read <= instr_mem;
+        MEMr_read_rd <= MEMr_rd;
+        data_word_address <= mem_op_out;
     end
 
     // ====== MEM Read Stage ======================================================
-    logic [XLEN-1:0] pc_mem_read, mem_read_in1, mem_read_in2, data_read_out, dm_a, dm_wd;
+    logic [XLEN-1:0] pc_mem_read, mem_read_in, data_read_out, dm_a, dm_wd;
     logic [6:0] MEMr_read_rd;
     instruct_t instr_mem_read;
-    logic [7:0] data_byte_cache[0:XLEN-1]; // 32 byte data cache
+    data_byte_cache_t data_byte_cache [0:3]; // 32 byte data cache
     logic [XLEN-1:0] data_word_address;
     logic [XLEN-1:0] mem_out;
     logic dm_cd;
@@ -485,61 +468,70 @@ module top
     ); // read memory
 
     always_ff @(negedge clk) begin
-        if (instr_mem_read.op == OP_STORE) begin
-            for (int i = 0; i < 4; i = i + 1) begin
-                dm_wd[i*8+:8] <= data_byte_cache[data_word_address+i];
-            end
+        if (instr_mem_read.op == OP_LOAD) begin
             dm_a <= data_word_address;
-            dm_cd <= 1;
-        end else dm_cd <= 0;
+        end 
     end
 
     always_comb begin
         if (instr_mem_read.op == OP_STORE) begin
             casez (instr_mem_read.funct3)
-                F3_SB: data_byte_cache[mem_read_in1] = mem_read_in2[7:0];
+                F3_SB: begin
+                    data_byte_cache[0].value = mem_read_in[7:0];
+                    data_byte_cache[0].data_address = data_word_address;
+                    data_byte_cache[0].pc = pc_mem_read;
+                end
                 F3_SH: begin
-                    data_byte_cache[mem_read_in1] = mem_read_in2[7:0];
-                    data_byte_cache[mem_read_in1+1] = mem_read_in2[15:8];
+                    data_byte_cache[0].pc = pc_mem_read;
+                    data_byte_cache[0].value = mem_read_in[7:0];
+                    data_byte_cache[0].data_address = data_word_address;
+                    data_byte_cache[1].value = mem_read_in[15:8];
+                    data_byte_cache[1].data_address = data_word_address + 1;
                 end
                 F3_SW: begin
-                    data_byte_cache[mem_read_in1] = mem_read_in2[7:0];
-                    data_byte_cache[mem_read_in1+1] = mem_read_in2[15:8];
-                    data_byte_cache[mem_read_in1+2] = mem_read_in2[23:16];
-                    data_byte_cache[mem_read_in1+3] = mem_read_in2[31:24];
+                    data_byte_cache[0].pc = pc_mem_read;
+                    data_byte_cache[0].value = mem_read_in[7:0];
+                    data_byte_cache[0].data_address = data_word_address;
+                    data_byte_cache[1].value = mem_read_in[15:8];
+                    data_byte_cache[1].data_address = data_word_address + 1;
+                    data_byte_cache[2].value = mem_read_in[23:16];
+                    data_byte_cache[2].data_address = data_word_address + 2;
+                    data_byte_cache[3].value = mem_read_in[31:24];
+                    data_byte_cache[3].data_address = data_word_address + 3;
                 end
-                default: data_byte_cache[mem_read_in1] = data_byte_cache[mem_read_in1];
+                default: begin data_byte_cache[0] = data_byte_cache[0];
+                        data_byte_cache[1] = data_byte_cache[1];
+                        data_byte_cache[2] = data_byte_cache[2];
+                        data_byte_cache[3] =   data_byte_cache[3]; 
+                end
+                
             endcase
         end else if (instr_mem_read.op == OP_LOAD) begin
             casez (instr_mem_read.funct3)
                 F3_LB:
-                mem_out = {{(XLEN - 8) {data_byte_cache[mem_read_in1][7]}}, data_byte_cache[mem_read_in1]};
+                mem_out = {{(XLEN - 8) {data_read_out[7]}}, data_read_out[7:0]};
                 F3_LH:
                 mem_out = {
-                    {(XLEN - 16) {data_byte_cache[mem_read_in1+1][7]}},
-                    data_byte_cache[mem_read_in1+1],
-                    data_byte_cache[mem_read_in1]
+                    {(XLEN - 16) {data_read_out[15]}}, data_read_out [15:0]
                 };
-                F3_LW:
-                mem_out = {
-                    data_byte_cache[mem_read_in1+3],
-                    data_byte_cache[mem_read_in1+2],
-                    data_byte_cache[mem_read_in1+1],
-                    data_byte_cache[mem_read_in1]
-                };
-                F3_LBU: mem_out = {{(XLEN - 8) {1'b0}}, data_byte_cache[mem_read_in1]};
+                F3_LW: mem_out = data_read_out;
+                F3_LBU: mem_out = {{(XLEN - 8) {1'b0}}, data_read_out [7:0]};
                 F3_LHU:
                 mem_out = {
-                    {(XLEN - 16) {1'b0}}, data_byte_cache[mem_read_in1], data_byte_cache[mem_read_in1+1]
+                    {(XLEN - 16) {1'b0}}, data_read_out [15:0]
                 };
             endcase
-        end else mem_out = 0;
+        end else  begin 
+            mem_out = 0;
+            data_byte_cache[0] = data_byte_cache[0];
+            data_byte_cache[1] = data_byte_cache[1];
+            data_byte_cache[2] = data_byte_cache[2];
+            data_byte_cache[3] = data_byte_cache[3];
+        end
     end
 
     always_ff @(posedge clk) begin
-        cache_busy[data_word_address] <= 1'b0;
-
-        prf_register[MEMr_read_rd] <= mem_out;
+        dm_a <= data_word_address;
         for (int i = 0; i < rob_stack_count; i++) begin
             if (pc_mem_read == ROB[i].pc) begin
                 ROB[i].state <= ROB_FINISHED;
@@ -548,7 +540,8 @@ module top
     end
 
     // ====== Commit Stage ========================================================
-    logic [XLEN-1:0] r_wd3, r_wd3_2;
+    logic [XLEN-1:0] r_wd3, r_wd3_2, commit_mem_a, commit_mem_wd;
+    logic commit_mem_cd;
     logic [4:0] commit_rd, commit_rd2;
 
     always_ff @(posedge clk) begin
@@ -563,6 +556,11 @@ module top
             prf_register[ROB[0].prev_prf_rd] <= 0;
             free_list[ROB[0].prev_prf_rd] <= 1'b0;
             busy_table[ROB[0].prf_rd] <= 1'b0;
+            if (ROB[0].instr[6:0] == 7'b0100011) begin
+                dm_cd <= 1;
+                dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
+                data_byte_cache[1].value, data_byte_cache[0].value};
+            end
             if(ROB[1].state == ROB_FINISHED) begin
                 pc_o2 <= ROB[1].pc;
                 instr_o2 <= ROB[1].instr;
@@ -598,14 +596,20 @@ module top
             commit_rd <= 0;
         end
     end
+
+
+
+
     always_ff @(negedge clk) begin
         if (commit_rd == 0) begin
             register[0] <= 0;
+            dm_cd <= 0;
         end else begin
             register[commit_rd] <= r_wd3;
         end
         if (commit_rd2 == 0) begin
             register[0] <= 0;
+            dm_cd <= 0;
         end else begin
             register[commit_rd2] <= r_wd3_2;
         end

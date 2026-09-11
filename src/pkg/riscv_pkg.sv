@@ -29,6 +29,12 @@ package riscv_pkg;
         logic [31:0] pc; // [31:0] (32 bit - XLEN=32)
     } rob_t;
 
+    typedef struct packed {
+        logic [7:0]      value;
+        logic [XLEN-1:0] data_address;
+        logic [XLEN-1:0] pc; // [31:0] (32 bit - XLEN=32)
+    } data_byte_cache_t;
+
     //====================================================================
     // Opcodes
     //====================================================================
@@ -74,6 +80,8 @@ package riscv_pkg;
         instruct_t       instr;   // [100:32]  (68 bit)
         logic [31:0]     pc;      // [31:0]    (32 bit)
     } iq_t;
+
+    
 
     //====================================================================
     // funct3 groups
