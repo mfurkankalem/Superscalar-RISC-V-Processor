@@ -156,7 +156,7 @@ module top
         end
     end
 
-    logic alu1_done, alu2_done, mem_done;
+    logic alu1_done, alu2_done, mem_done, mem_busy;
     int alu1_number, alu2_number;
 
     always_comb begin
@@ -182,7 +182,7 @@ module top
             end
             end
             if(iq_mem_stack_count >0) begin
-             if (!en_m && (busy_table[IQ_MEM[0].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[0].prf_rs2] == 1'b0)) begin
+             if (!mem_busy && (busy_table[IQ_MEM[0].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[0].prf_rs2] == 1'b0)) begin
                     mem_done = 1;
              end else begin
                     mem_done = 0;
@@ -240,10 +240,12 @@ module top
             if (busy_table[IQ_MEM[0].prf_rd] != 0) begin
                 busy_table[IQ_MEM[0].prf_rd] <= 1'b1;
             end
+            mem_busy <= 1;
             for (int i = 0; i < 31; i++) begin
                 IQ_MEM[i] <= IQ_MEM[i+1];
             end
             IQ_MEM[31] <= '0;
+            iq_mem_stack_count <= iq_mem_stack_count - 1;
             en_m <= 1;
         end
         else begin
@@ -532,6 +534,9 @@ module top
 
     always_ff @(posedge clk) begin
         dm_a <= data_word_address;
+        if(instr_mem_read.op == OP_LOAD) begin
+            prf_register[MEMr_read_rd] <= mem_out;
+        end
         for (int i = 0; i < rob_stack_count; i++) begin
             if (pc_mem_read == ROB[i].pc) begin
                 ROB[i].state <= ROB_FINISHED;
@@ -560,6 +565,8 @@ module top
                 dm_cd <= 1;
                 dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
                 data_byte_cache[1].value, data_byte_cache[0].value};
+                mem_busy <= 0;
+                en_m <= 0;
             end
             if(ROB[1].state == ROB_FINISHED) begin
                 pc_o2 <= ROB[1].pc;
