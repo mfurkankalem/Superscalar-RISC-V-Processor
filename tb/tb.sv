@@ -1,6 +1,6 @@
 module tb ();
   logic [riscv_pkg::XLEN-1:0] addr, addr2;
-  logic [31:0]                 data [0:31];  
+  logic [7:0]                 data [0:31];  
   logic [riscv_pkg::XLEN-1:0] pc, pc2;
   logic [riscv_pkg::XLEN-1:0] instr, instr2;
   logic [                4:0] reg_addr, reg_addr2;

@@ -20,7 +20,7 @@ module top
         output logic [XLEN-1:0] reg_data_o, // log register data
         output logic [XLEN-1:0] reg_data_o2, // log register data
         output logic [XLEN-1:0] mem_addr_o, // retired memory address
-        output logic [31:0] data_o[0:XLEN-1], // data memory write
+        output logic [7:0] data_o[0:XLEN-1], // data memory write
         output logic [XLEN-1:0] mem_data_o // retired memory data
     );
 
@@ -458,7 +458,7 @@ module top
     data_byte_cache_t data_byte_cache [0:3]; // 32 byte data cache
     logic [XLEN-1:0] data_word_address;
     logic [XLEN-1:0] mem_out;
-    logic dm_cd;
+    dm_t dm_cd;
 
     data_memory data_memory_0 (
         .clk (clk),
@@ -562,9 +562,22 @@ module top
             free_list[ROB[0].prev_prf_rd] <= 1'b0;
             busy_table[ROB[0].prf_rd] <= 1'b0;
             if (ROB[0].instr[6:0] == 7'b0100011) begin
-                dm_cd <= 1;
+                if (ROB[0].instr[14:12] == F3_SB) begin
+                    dm_cd <= DM_WRITE_B;
+                end else if (ROB[0].instr[14:12] == F3_SH) begin
+                    dm_cd <= DM_WRITE_H;
+                end else if (ROB[0].instr[14:12] == F3_SW) begin
+                    dm_cd <= DM_WRITE_W;
+                end
                 dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
                 data_byte_cache[1].value, data_byte_cache[0].value};
+                mem_busy <= 0;
+                dm_a <= data_byte_cache[0].data_address;
+                en_m <= 0;
+            end
+            else if (ROB[0].instr[6:0] == 7'b0000011) begin
+                dm_cd <= DM_READ;
+                dm_a <= data_word_address;
                 mem_busy <= 0;
                 en_m <= 0;
             end
@@ -579,6 +592,27 @@ module top
                 prf_register[ROB[1].prev_prf_rd] <= 0;
                 free_list[ROB[1].prev_prf_rd] <= 1'b0;
                 busy_table[ROB[1].prf_rd] <= 1'b0;
+                if (ROB[1].instr[6:0] == 7'b0100011) begin
+                if (ROB[1].instr[14:12] == F3_SB) begin
+                    dm_cd <= DM_WRITE_B;
+                end else if (ROB[1].instr[14:12] == F3_SH) begin
+                    dm_cd <= DM_WRITE_H;
+                end else if (ROB[1].instr[14:12] == F3_SW) begin
+                    dm_cd <= DM_WRITE_W;
+                end
+                dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
+                data_byte_cache[1].value, data_byte_cache[0].value};
+                dm_a <= data_byte_cache[0].data_address;
+                mem_busy <= 0;
+                en_m <= 0;
+                end 
+                else if (ROB[1].instr[6:0] == 7'b0000011) begin
+                dm_cd <= DM_READ;
+                dm_a <= data_word_address;
+                mem_busy <= 0;
+                en_m <= 0;
+        
+                end
                 for (int i2 = 0; i2 < 30; i2++) begin
                 ROB[i2] <= ROB[i2+2];
                 end
@@ -610,13 +644,13 @@ module top
     always_ff @(negedge clk) begin
         if (commit_rd == 0) begin
             register[0] <= 0;
-            dm_cd <= 0;
+            dm_cd <= DM_READ;
         end else begin
             register[commit_rd] <= r_wd3;
         end
         if (commit_rd2 == 0) begin
             register[0] <= 0;
-            dm_cd <= 0;
+            dm_cd <= DM_READ;
         end else begin
             register[commit_rd2] <= r_wd3_2;
         end

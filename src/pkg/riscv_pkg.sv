@@ -20,6 +20,13 @@ package riscv_pkg;
         ROB_FINISHED = 2'b11
     } state;
 
+    typedef enum logic [1:0] {
+        DM_READ = 2'b00,
+        DM_WRITE_B = 2'b01,
+        DM_WRITE_H = 2'b10,
+        DM_WRITE_W = 2'b11
+    } dm_t;
+
     typedef struct packed {
         state state; // [84:83] (2 bit)
         logic [6:0] prf_rd; // [82:76] (7 bit)

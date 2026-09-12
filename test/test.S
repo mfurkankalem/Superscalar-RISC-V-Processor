@@ -1,10 +1,15 @@
 .section .text
 .globl _start
 _start:
-    addi x7, x0, 5
-    addi x3, x7, 3
-    addi x1, x0, 1
-    sw x7, 0(x0)
-    sb x3, 0(x1)
-    lw x2, 0(x0)
+    addi x3, x0, 2
+    addi x2, x0, 1
+    addi x1, x0, -2
+    add x4, x3, x2
+    add x5, x4, x1
+    sw x3, 0(x0)
+    addi x5, x5, 2
+    sw x5, 1(x0)
+    lw x4, 0(x0)
+    lw x3, 1(x0)
+    addi x8, x0, 1
     
