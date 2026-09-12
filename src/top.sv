@@ -156,7 +156,7 @@ module top
         end
     end
 
-    logic alu1_done, alu2_done, mem_done, mem_busy;
+    logic alu1_done, alu2_done, mem_done;
     int alu1_number, alu2_number;
 
     always_comb begin
@@ -182,7 +182,7 @@ module top
             end
             end
             if(iq_mem_stack_count >0) begin
-             if (!mem_busy && (busy_table[IQ_MEM[0].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[0].prf_rs2] == 1'b0)) begin
+             if (!en_m && (busy_table[IQ_MEM[0].prf_rs1] == 1'b0) && (busy_table[IQ_MEM[0].prf_rs2] == 1'b0)) begin
                     mem_done = 1;
              end else begin
                     mem_done = 0;
@@ -240,7 +240,6 @@ module top
             if (busy_table[IQ_MEM[0].prf_rd] != 0) begin
                 busy_table[IQ_MEM[0].prf_rd] <= 1'b1;
             end
-            mem_busy <= 1;
             for (int i = 0; i < 31; i++) begin
                 IQ_MEM[i] <= IQ_MEM[i+1];
             end
@@ -571,14 +570,12 @@ module top
                 end
                 dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
                 data_byte_cache[1].value, data_byte_cache[0].value};
-                mem_busy <= 0;
                 dm_a <= data_byte_cache[0].data_address;
                 en_m <= 0;
             end
             else if (ROB[0].instr[6:0] == 7'b0000011) begin
                 dm_cd <= DM_READ;
                 dm_a <= data_word_address;
-                mem_busy <= 0;
                 en_m <= 0;
             end
             if(ROB[1].state == ROB_FINISHED) begin
@@ -603,13 +600,11 @@ module top
                 dm_wd <= {data_byte_cache[3].value, data_byte_cache[2].value, 
                 data_byte_cache[1].value, data_byte_cache[0].value};
                 dm_a <= data_byte_cache[0].data_address;
-                mem_busy <= 0;
                 en_m <= 0;
                 end 
                 else if (ROB[1].instr[6:0] == 7'b0000011) begin
                 dm_cd <= DM_READ;
                 dm_a <= data_word_address;
-                mem_busy <= 0;
                 en_m <= 0;
         
                 end
