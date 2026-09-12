@@ -806,7 +806,7 @@ module top
             end
             OP_JAL: alu_op_e = ALU_NONE;
             OP_JALR: alu_op_e = ALU_ADD;
-            OP_LUI: alu_op_e = ALU_NONE;
+            OP_LUI: alu_op_e = ALU_ADD;
             OP_AUIPC: alu_op_e = ALU_ADD;
             default: alu_op_e = ALU_INVALID;
         endcase
